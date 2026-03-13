@@ -1,0 +1,31 @@
+[package]
+name = "kaneo"
+version = "0.1.0"
+edition = "2024"
+description = "CLI for Kaneo project management"
+license = "MIT"
+repository = "https://github.com/onreza/kaneo-cli"
+homepage = "https://github.com/onreza/kaneo-cli"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+console = "0.15"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "6"
+indicatif = "0.17"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+
+[profile.release]
+lto = "thin"
+strip = true
+codegen-units = 4
+
+[profile.optimized]
+inherits = "release"
+lto = true
+codegen-units = 1
