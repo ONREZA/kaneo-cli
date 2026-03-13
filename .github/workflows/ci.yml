@@ -40,6 +40,9 @@ jobs:
       - name: Run clippy
         run: cargo clippy -- -D warnings
 
+      - name: Validate API routes against OpenAPI spec
+        run: cargo test --test validate_routes -- --ignored
+
   # Lint commit messages on PR
   commitlint:
     name: Lint Commit Messages
