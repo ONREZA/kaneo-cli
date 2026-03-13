@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.1] - 2026-03-13
+
+### 🐛 Bug Fixes
+
+- **cli:** show requested status in task status output, clarify --status help ([70b6746](https://github.com/ONREZA/kaneo-cli/commit/70b6746c833b8627a6d1fdea57c4cbaa3ffd00eb))
+- **cli:** use Value for delete responses instead of typed structs ([3ea81d3](https://github.com/ONREZA/kaneo-cli/commit/3ea81d3b4f30230cec6b8783fb7cf3ed382aa887))
+- **cli:** remove positional project_id from create/import, add task list filters ([2922bfe](https://github.com/ONREZA/kaneo-cli/commit/2922bfeadb27f959ca53b28436a9fa6d6814e78e))
+- **api:** correct workspace list endpoint to /auth/organization/list ([cd5dbf8](https://github.com/ONREZA/kaneo-cli/commit/cd5dbf83e300da7fd567213ba8b05fb9074af7f7))
+
+### ✅ Testing
+
+- **api:** add route validation against OpenAPI spec ([eb6b39c](https://github.com/ONREZA/kaneo-cli/commit/eb6b39c6344927f37903f5fc0cad9e0d4e993cf5))
+
 ## [0.4.0] - 2026-03-13
 
 ### ✨ Features
