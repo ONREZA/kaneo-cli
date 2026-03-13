@@ -3,6 +3,7 @@ mod auth;
 mod cli;
 mod config;
 mod output;
+mod upgrade;
 
 use clap::Parser;
 use cli::{Cli, Command};
@@ -13,7 +14,33 @@ async fn main() {
 
     let json = !cli.human && (cli.json || !std::io::IsTerminal::is_terminal(&std::io::stdout()));
 
+    // Spawn background version check if cache is stale (non-blocking)
+    let is_upgrade_cmd = matches!(cli.command, Command::Upgrade(_));
+    if !json && !is_upgrade_cmd && upgrade::should_check_version() {
+        upgrade::spawn_version_check();
+    }
+
+    // Check cached version hint (instant, no network)
+    let update_hint = if !json && !is_upgrade_cmd {
+        upgrade::check_cached_update()
+    } else {
+        None
+    };
+
     let result = run(cli, json).await;
+
+    // Show update hint after command output
+    if let Some(version) = update_hint {
+        let dim = console::Style::new().dim();
+        let yellow = console::Style::new().yellow();
+        eprintln!(
+            "\n  {} {} → {} {}",
+            yellow.apply_to("Update available:"),
+            dim.apply_to(concat!("v", env!("CARGO_PKG_VERSION"))),
+            yellow.apply_to(format!("v{version}")),
+            dim.apply_to("(run `kaneo upgrade`)"),
+        );
+    }
 
     if let Err(ref e) = result {
         if json {
@@ -27,12 +54,6 @@ async fn main() {
 }
 
 async fn run(cli: Cli, json: bool) -> anyhow::Result<()> {
-    // Commands that don't need auth context
-    match &cli.command {
-        Command::Login(_) | Command::Logout | Command::Profile(_) => {}
-        _ => {}
-    }
-
     let token = cli.token.as_deref();
     let api_url = cli.api_url.as_deref();
     let workspace = cli.workspace.as_deref();
@@ -88,7 +109,6 @@ async fn run(cli: Cli, json: bool) -> anyhow::Result<()> {
             cli::search_handler::run(args, &ctx, json).await?;
         }
         Command::ApiCheck => {
-            // api-check only needs the URL, not auth — try resolve but fall back to URL-only
             let ctx = auth::resolve_context(token, api_url, workspace).unwrap_or_else(|_| {
                 auth::ResolvedContext {
                     api_url: api_url.unwrap_or("https://cloud.kaneo.app").to_string(),
@@ -97,6 +117,9 @@ async fn run(cli: Cli, json: bool) -> anyhow::Result<()> {
                 }
             });
             cli::api_check_handler::run(&ctx, json).await?;
+        }
+        Command::Upgrade(args) => {
+            upgrade::run(args).await?;
         }
     }
 

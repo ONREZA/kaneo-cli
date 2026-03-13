@@ -87,6 +87,9 @@ pub enum Command {
 
     /// Check CLI compatibility with the server's API
     ApiCheck,
+
+    /// Upgrade kaneo to the latest version
+    Upgrade(crate::upgrade::UpgradeArgs),
 }
 
 // --- Login ---
