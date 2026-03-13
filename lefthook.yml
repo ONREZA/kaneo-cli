@@ -1,7 +1,7 @@
 commit-msg:
   commands:
-    commitlint:
-      run: npx --yes commitlint --edit {1}
+    cocogitto:
+      run: cog verify --file {1}
 
 pre-commit:
   parallel: false

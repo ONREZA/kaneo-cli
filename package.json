@@ -16,15 +16,10 @@
   ],
   "scripts": {
     "prepare": "lefthook install || echo 'Install lefthook: https://github.com/evilmartians/lefthook'",
-    "commitlint": "commitlint",
     "release": "onreza-release"
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.4.4",
     "lefthook": "^2.1.4",
     "onreza-release": "^2.7.0"
-  },
-  "overrides": {
-    "tinyexec": "0.3.2"
   }
 }
