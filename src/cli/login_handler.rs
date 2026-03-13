@@ -24,6 +24,7 @@ pub fn run(args: LoginArgs, json: bool) -> anyhow::Result<()> {
             api_url: url.trim_end_matches('/').to_string(),
             api_key: key,
             workspace_id: args.workspace,
+            project_id: None,
         },
     );
 

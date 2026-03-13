@@ -39,6 +39,10 @@ pub struct Cli {
     /// Workspace ID
     #[arg(long, short = 'w', global = true, env = "KANEO_WORKSPACE")]
     pub workspace: Option<String>,
+
+    /// Project ID
+    #[arg(long, short = 'p', global = true, env = "KANEO_PROJECT")]
+    pub project: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -51,6 +55,13 @@ pub enum Command {
     Logout,
     /// Manage connection profiles
     Profile(ProfileArgs),
+
+    /// Link current directory to a workspace/project (.kaneo.json)
+    Link(LinkArgs),
+    /// Remove .kaneo.json from current directory
+    Unlink,
+    /// Show resolved context (workspace, project, profile)
+    Context,
 
     /// Manage workspaces
     #[command(alias = "ws")]
@@ -90,6 +101,18 @@ pub enum Command {
 
     /// Upgrade kaneo to the latest version
     Upgrade(crate::upgrade::UpgradeArgs),
+}
+
+// --- Link ---
+
+#[derive(Parser)]
+pub struct LinkArgs {
+    /// Workspace ID to link
+    #[arg(long, short = 'w')]
+    pub workspace: Option<String>,
+    /// Project ID to link
+    #[arg(long, short = 'p')]
+    pub project: Option<String>,
 }
 
 // --- Login ---
@@ -317,8 +340,8 @@ pub enum TaskCommand {
     /// List tasks in a project (board view)
     #[command(alias = "ls")]
     List {
-        /// Project ID
-        project_id: String,
+        /// Project ID (falls back to -p / .kaneo.json)
+        project_id: Option<String>,
     },
     /// Get task details
     Get {
@@ -327,8 +350,8 @@ pub enum TaskCommand {
     },
     /// Create a new task
     Create {
-        /// Project ID
-        project_id: String,
+        /// Project ID (falls back to -p / .kaneo.json)
+        project_id: Option<String>,
         /// Task title
         title: String,
         /// Description
@@ -398,13 +421,13 @@ pub enum TaskCommand {
     },
     /// Export tasks from a project
     Export {
-        /// Project ID
-        project_id: String,
+        /// Project ID (falls back to -p / .kaneo.json)
+        project_id: Option<String>,
     },
     /// Import tasks into a project from JSON
     Import {
-        /// Project ID
-        project_id: String,
+        /// Project ID (falls back to -p / .kaneo.json)
+        project_id: Option<String>,
         /// Path to JSON file with tasks array
         file: String,
     },
@@ -441,13 +464,13 @@ pub enum ColumnCommand {
     /// List columns in a project
     #[command(alias = "ls")]
     List {
-        /// Project ID
-        project_id: String,
+        /// Project ID (falls back to -p / .kaneo.json)
+        project_id: Option<String>,
     },
     /// Create a column
     Create {
-        /// Project ID
-        project_id: String,
+        /// Project ID (falls back to -p / .kaneo.json)
+        project_id: Option<String>,
         /// Column name
         name: String,
         #[arg(long)]
@@ -472,8 +495,8 @@ pub enum ColumnCommand {
     },
     /// Reorder columns in a project
     Reorder {
-        /// Project ID
-        project_id: String,
+        /// Project ID (falls back to -p / .kaneo.json)
+        project_id: Option<String>,
         /// Column IDs in desired order (comma-separated)
         order: String,
     },

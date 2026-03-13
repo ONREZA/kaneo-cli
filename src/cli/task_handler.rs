@@ -1,16 +1,22 @@
 use crate::api::ApiClient;
 use crate::api::client::upload_to_presigned_url;
 use crate::api::types::{CreateTaskBody, Task};
-use crate::auth::ResolvedContext;
+use crate::auth::{self, ResolvedContext};
 use crate::cli::{TaskArgs, TaskCommand};
 use crate::output;
 use serde::Serialize;
+
+fn resolve_project(arg: Option<String>, ctx: &ResolvedContext) -> anyhow::Result<String> {
+    arg.or_else(|| ctx.project_id.clone())
+        .ok_or_else(|| anyhow::anyhow!("{}", auth::require_project(ctx).unwrap_err()))
+}
 
 pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::Result<()> {
     let client = ApiClient::new(&ctx.api_url, &ctx.api_key)?;
 
     match args.command {
         TaskCommand::List { project_id } => {
+            let project_id = resolve_project(project_id, ctx)?;
             let board: serde_json::Value = client.get(&format!("/task/tasks/{project_id}")).await?;
 
             if json {
@@ -39,6 +45,7 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             due_date,
             assignee,
         } => {
+            let project_id = resolve_project(project_id, ctx)?;
             let body = CreateTaskBody {
                 title,
                 description,
@@ -195,12 +202,14 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
         }
 
         TaskCommand::Export { project_id } => {
+            let project_id = resolve_project(project_id, ctx)?;
             let data: serde_json::Value = client.get(&format!("/task/export/{project_id}")).await?;
 
             output::json_output(&data);
         }
 
         TaskCommand::Import { project_id, file } => {
+            let project_id = resolve_project(project_id, ctx)?;
             let content = std::fs::read_to_string(&file)
                 .map_err(|e| anyhow::anyhow!("reading {file}: {e}"))?;
             let body: serde_json::Value = serde_json::from_str(&content)

@@ -33,31 +33,73 @@ cargo install kaneo
 ## Quick Start
 
 ```bash
-# Authenticate with your Kaneo instance
+# 1. Authenticate with your Kaneo instance
 kaneo login --url https://cloud.kaneo.app --key YOUR_API_KEY
 
-# List workspaces
-kaneo workspace ls
-
-# Set default workspace
+# 2. Set default workspace on the profile
 kaneo profile set-workspace WORKSPACE_ID
 
-# List projects
+# 3. List projects in your workspace
 kaneo project ls
 
-# Create a task
-kaneo task create PROJECT_ID "Fix login bug" --priority high --status todo
+# 4. Link current directory to a project (creates .kaneo.json)
+kaneo link -w WORKSPACE_ID -p PROJECT_ID
 
-# View board
-kaneo task ls PROJECT_ID
-
-# Search across everything
-kaneo search "login bug"
+# 5. Now all commands use that project/workspace automatically
+kaneo task ls           # no need to pass project ID
+kaneo task create "Fix login bug" --priority high
+kaneo col ls            # list board columns
+kaneo search "login"    # search across everything
 ```
+
+## Project Context (`.kaneo.json`)
+
+Instead of passing `--workspace` and `--project` on every command, link a directory:
+
+```bash
+# Link current directory to a workspace and project
+kaneo link -w WORKSPACE_ID -p PROJECT_ID
+
+# This creates a .kaneo.json file in the current directory:
+# { "workspace": "...", "project": "..." }
+
+# Now commands that need a project ID will use it automatically
+kaneo task ls
+kaneo task create "New feature"
+kaneo col ls
+kaneo task export
+
+# Check what context is currently resolved
+kaneo context
+
+# Remove the link
+kaneo unlink
+```
+
+### Resolution Priority
+
+Context is resolved from multiple sources (highest priority first):
+
+1. **CLI flags** — `--token`, `-w`, `-p`
+2. **Environment variables** — `KANEO_API_KEY`, `KANEO_WORKSPACE`, `KANEO_PROJECT`
+3. **`.kaneo.json` walk-up** — searches from current directory up to `$HOME`
+4. **Global profile** — `~/.config/kaneo/config.json`
+
+### Monorepo Support
+
+`.kaneo.json` files are resolved by walking up from the current directory to `$HOME`. This means you can have different configs at different levels:
+
+```
+~/projects/.kaneo.json          → { "workspace": "ws-abc" }
+~/projects/frontend/.kaneo.json → { "project": "proj-fe" }
+~/projects/backend/.kaneo.json  → { "project": "proj-be" }
+```
+
+When you run `kaneo task ls` from `~/projects/frontend/`, the CLI will pick up `project: proj-fe` from the nearest config and `workspace: ws-abc` from the parent — closest value wins.
 
 ## Commands
 
-### Authentication
+### Authentication & Context
 
 | Command | Description |
 |---------|-------------|
@@ -68,6 +110,9 @@ kaneo search "login bug"
 | `kaneo profile use <name>` | Switch active profile |
 | `kaneo profile current` | Show current profile details |
 | `kaneo profile set-workspace <id>` | Set workspace on profile |
+| `kaneo link [-w id] [-p id]` | Link current directory to workspace/project |
+| `kaneo unlink` | Remove `.kaneo.json` from current directory |
+| `kaneo context` | Show resolved context (api, workspace, project) |
 
 ### Workspaces
 
@@ -103,9 +148,9 @@ kaneo search "login bug"
 
 | Command | Description |
 |---------|-------------|
-| `kaneo t ls <project_id>` | List tasks (board view) |
+| `kaneo t ls [project_id]` | List tasks (board view) |
 | `kaneo t get <id>` | Get task details |
-| `kaneo t create <project_id> <title>` | Create a task |
+| `kaneo t create [project_id] <title>` | Create a task |
 | `kaneo t status <id> <status>` | Update status |
 | `kaneo t priority <id> <priority>` | Update priority |
 | `kaneo t assign <id> [user_id]` | Assign/unassign |
@@ -113,19 +158,21 @@ kaneo search "login bug"
 | `kaneo t description <id> <desc>` | Update description |
 | `kaneo t due-date <id> [date]` | Set/clear due date |
 | `kaneo t delete <id>` | Delete a task |
-| `kaneo t export <project_id>` | Export tasks as JSON |
-| `kaneo t import <project_id> <file>` | Import tasks from JSON |
+| `kaneo t export [project_id]` | Export tasks as JSON |
+| `kaneo t import [project_id] <file>` | Import tasks from JSON |
 | `kaneo t upload <task_id> <file>` | Upload image to task |
 | `kaneo t asset <id>` | Download attachment |
+
+> Commands marked with `[project_id]` use the linked project from `.kaneo.json` when omitted.
 
 ### Columns
 
 | Command | Description |
 |---------|-------------|
-| `kaneo col ls <project_id>` | List columns |
-| `kaneo col create <project_id> <name>` | Create column |
+| `kaneo col ls [project_id]` | List columns |
+| `kaneo col create [project_id] <name>` | Create column |
 | `kaneo col update <id>` | Update column |
-| `kaneo col reorder <project_id> <ids>` | Reorder columns |
+| `kaneo col reorder [project_id] <ids>` | Reorder columns |
 | `kaneo col delete <id>` | Delete column |
 
 ### Labels
@@ -171,6 +218,7 @@ kaneo search "login bug"
 |---------|-------------|
 | `kaneo search <query>` | Search tasks, projects, comments |
 | `kaneo api-check` | Validate CLI against server API |
+| `kaneo upgrade` | Update CLI to the latest version |
 
 ## Output Modes
 
@@ -197,6 +245,7 @@ Credentials are stored in `~/.config/kaneo/config.json` (Linux/macOS) or `%APPDA
 | `KANEO_API_KEY` | API key (overrides config) |
 | `KANEO_API_URL` | API base URL |
 | `KANEO_WORKSPACE` | Default workspace ID |
+| `KANEO_PROJECT` | Default project ID |
 | `KANEO_JSON` | Force JSON output (`true`) |
 
 **Global flags:**
@@ -206,8 +255,19 @@ Credentials are stored in `~/.config/kaneo/config.json` (Linux/macOS) or `%APPDA
 | `--token <key>` | API key (highest priority) |
 | `--api-url <url>` | API base URL |
 | `-w <id>` | Workspace ID |
+| `-p <id>` | Project ID |
 | `--json` | Force JSON output |
 | `--human` | Force human output |
+
+## Self-Update
+
+The CLI checks for updates in the background and shows a hint when a new version is available:
+
+```
+  Update available: v0.2.0 → v0.3.0 (run `kaneo upgrade`)
+```
+
+Run `kaneo upgrade` to update to the latest version.
 
 ## Supported Platforms
 

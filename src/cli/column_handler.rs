@@ -1,15 +1,21 @@
 use crate::api::ApiClient;
 use crate::api::types::{Column, CreateColumnBody};
-use crate::auth::ResolvedContext;
+use crate::auth::{self, ResolvedContext};
 use crate::cli::{ColumnArgs, ColumnCommand};
 use crate::output;
 use serde::Serialize;
+
+fn resolve_project(arg: Option<String>, ctx: &ResolvedContext) -> anyhow::Result<String> {
+    arg.or_else(|| ctx.project_id.clone())
+        .ok_or_else(|| anyhow::anyhow!("{}", auth::require_project(ctx).unwrap_err()))
+}
 
 pub async fn run(args: ColumnArgs, ctx: &ResolvedContext, json: bool) -> anyhow::Result<()> {
     let client = ApiClient::new(&ctx.api_url, &ctx.api_key)?;
 
     match args.command {
         ColumnCommand::List { project_id } => {
+            let project_id = resolve_project(project_id, ctx)?;
             let columns: Vec<Column> = client.get(&format!("/column/{project_id}")).await?;
 
             if json {
@@ -44,6 +50,7 @@ pub async fn run(args: ColumnArgs, ctx: &ResolvedContext, json: bool) -> anyhow:
             color,
             is_final,
         } => {
+            let project_id = resolve_project(project_id, ctx)?;
             let body = CreateColumnBody {
                 name: name.clone(),
                 icon,
@@ -94,6 +101,7 @@ pub async fn run(args: ColumnArgs, ctx: &ResolvedContext, json: bool) -> anyhow:
         }
 
         ColumnCommand::Reorder { project_id, order } => {
+            let project_id = resolve_project(project_id, ctx)?;
             #[derive(Serialize)]
             struct ReorderBody {
                 columns: Vec<ColumnPosition>,
