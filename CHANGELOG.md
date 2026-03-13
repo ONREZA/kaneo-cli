@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-03-13
+
+### ✨ Features
+
+- **cli:** add interactive selection for link, status, priority, and set-active ([c727856](https://github.com/ONREZA/kaneo-cli/commit/c7278560b0059395a3a16dc7a49558d1823210ae))
+
 ## [0.3.0] - 2026-03-13
 
 ### ✨ Features
