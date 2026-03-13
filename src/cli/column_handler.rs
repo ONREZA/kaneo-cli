@@ -44,13 +44,12 @@ pub async fn run(args: ColumnArgs, ctx: &ResolvedContext, json: bool) -> anyhow:
         }
 
         ColumnCommand::Create {
-            project_id,
             name,
             icon,
             color,
             is_final,
         } => {
-            let project_id = resolve_project(project_id, ctx)?;
+            let project_id = resolve_project(None, ctx)?;
             let body = CreateColumnBody {
                 name: name.clone(),
                 icon,
@@ -100,8 +99,8 @@ pub async fn run(args: ColumnArgs, ctx: &ResolvedContext, json: bool) -> anyhow:
             }
         }
 
-        ColumnCommand::Reorder { project_id, order } => {
-            let project_id = resolve_project(project_id, ctx)?;
+        ColumnCommand::Reorder { order } => {
+            let project_id = resolve_project(None, ctx)?;
             #[derive(Serialize)]
             struct ReorderBody {
                 columns: Vec<ColumnPosition>,

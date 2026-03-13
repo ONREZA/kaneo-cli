@@ -17,9 +17,15 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
     let client = ApiClient::new(&ctx.api_url, &ctx.api_key)?;
 
     match args.command {
-        TaskCommand::List { project_id } => {
+        TaskCommand::List {
+            project_id,
+            status,
+            priority,
+        } => {
             let project_id = resolve_project(project_id, ctx)?;
             let board: serde_json::Value = client.get(&format!("/task/tasks/{project_id}")).await?;
+
+            let board = filter_board(&board, status.as_deref(), priority.as_deref());
 
             if json {
                 output::json_output(&board);
@@ -39,7 +45,6 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
         }
 
         TaskCommand::Create {
-            project_id,
             title,
             description,
             priority,
@@ -47,7 +52,7 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             due_date,
             assignee,
         } => {
-            let project_id = resolve_project(project_id, ctx)?;
+            let project_id = resolve_project(None, ctx)?;
             let body = CreateTaskBody {
                 title,
                 description,
@@ -233,8 +238,8 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             output::json_output(&data);
         }
 
-        TaskCommand::Import { project_id, file } => {
-            let project_id = resolve_project(project_id, ctx)?;
+        TaskCommand::Import { file } => {
+            let project_id = resolve_project(None, ctx)?;
             let content = std::fs::read_to_string(&file)
                 .map_err(|e| anyhow::anyhow!("reading {file}: {e}"))?;
             let body: serde_json::Value = serde_json::from_str(&content)
@@ -401,12 +406,70 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
     Ok(())
 }
 
+/// Client-side filtering of board data by status (column name) and/or priority.
+fn filter_board(
+    board: &serde_json::Value,
+    status: Option<&str>,
+    priority: Option<&str>,
+) -> serde_json::Value {
+    if status.is_none() && priority.is_none() {
+        return board.clone();
+    }
+
+    let columns_arr = board
+        .as_array()
+        .or_else(|| board.get("columns").and_then(|v| v.as_array()));
+
+    let Some(columns) = columns_arr else {
+        return board.clone();
+    };
+
+    let filtered: Vec<serde_json::Value> = columns
+        .iter()
+        .filter(|col| {
+            if let Some(s) = status {
+                let name = col.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                if !name.eq_ignore_ascii_case(s) {
+                    return false;
+                }
+            }
+            true
+        })
+        .map(|col| {
+            if let Some(p) = priority {
+                let mut col = col.clone();
+                if let Some(tasks) = col.get("tasks").and_then(|v| v.as_array()) {
+                    let filtered_tasks: Vec<&serde_json::Value> = tasks
+                        .iter()
+                        .filter(|t| {
+                            t.get("priority")
+                                .and_then(|v| v.as_str())
+                                .is_some_and(|tp| tp.eq_ignore_ascii_case(p))
+                        })
+                        .collect();
+                    col["tasks"] = serde_json::json!(filtered_tasks);
+                }
+                col
+            } else {
+                col.clone()
+            }
+        })
+        .collect();
+
+    serde_json::json!(filtered)
+}
+
 fn print_board(board: &serde_json::Value) {
     let bold = console::Style::new().bold();
     let dim = console::Style::new().dim();
     let cyan = console::Style::new().cyan();
 
-    if let Some(columns) = board.as_array() {
+    // API may return [...] (array of columns) or { "columns": [...] }
+    let columns_arr = board
+        .as_array()
+        .or_else(|| board.get("columns").and_then(|v| v.as_array()));
+
+    if let Some(columns) = columns_arr {
         for col in columns {
             let name = col.get("name").and_then(|v| v.as_str()).unwrap_or("?");
             let tasks = col.get("tasks").and_then(|v| v.as_array());

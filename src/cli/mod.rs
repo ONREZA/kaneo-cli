@@ -343,6 +343,12 @@ pub enum TaskCommand {
     List {
         /// Project ID (falls back to -p / .kaneo.json)
         project_id: Option<String>,
+        /// Filter by status (column name)
+        #[arg(long)]
+        status: Option<String>,
+        /// Filter by priority
+        #[arg(long)]
+        priority: Option<String>,
     },
     /// Get task details
     Get {
@@ -351,8 +357,6 @@ pub enum TaskCommand {
     },
     /// Create a new task
     Create {
-        /// Project ID (falls back to -p / .kaneo.json)
-        project_id: Option<String>,
         /// Task title
         title: String,
         /// Description
@@ -427,8 +431,6 @@ pub enum TaskCommand {
     },
     /// Import tasks into a project from JSON
     Import {
-        /// Project ID (falls back to -p / .kaneo.json)
-        project_id: Option<String>,
         /// Path to JSON file with tasks array
         file: String,
     },
@@ -470,8 +472,6 @@ pub enum ColumnCommand {
     },
     /// Create a column
     Create {
-        /// Project ID (falls back to -p / .kaneo.json)
-        project_id: Option<String>,
         /// Column name
         name: String,
         #[arg(long)]
@@ -496,8 +496,6 @@ pub enum ColumnCommand {
     },
     /// Reorder columns in a project
     Reorder {
-        /// Project ID (falls back to -p / .kaneo.json)
-        project_id: Option<String>,
         /// Column IDs in desired order (comma-separated)
         order: String,
     },

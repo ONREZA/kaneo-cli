@@ -149,30 +149,32 @@ When you run `kaneo task ls` from `~/projects/frontend/`, the CLI will pick up `
 | Command | Description |
 |---------|-------------|
 | `kaneo t ls [project_id]` | List tasks (board view) |
+| `kaneo t ls --status backlog` | Filter by status (column) |
+| `kaneo t ls --priority high` | Filter by priority |
 | `kaneo t get <id>` | Get task details |
-| `kaneo t create [project_id] <title>` | Create a task |
-| `kaneo t status <id> <status>` | Update status |
-| `kaneo t priority <id> <priority>` | Update priority |
+| `kaneo t create <title>` | Create a task (uses linked project) |
+| `kaneo t status <id> [status]` | Update status (interactive if omitted) |
+| `kaneo t priority <id> [priority]` | Update priority (interactive if omitted) |
 | `kaneo t assign <id> [user_id]` | Assign/unassign |
 | `kaneo t title <id> <title>` | Update title |
 | `kaneo t description <id> <desc>` | Update description |
 | `kaneo t due-date <id> [date]` | Set/clear due date |
 | `kaneo t delete <id>` | Delete a task |
 | `kaneo t export [project_id]` | Export tasks as JSON |
-| `kaneo t import [project_id] <file>` | Import tasks from JSON |
+| `kaneo t import <file>` | Import tasks from JSON |
 | `kaneo t upload <task_id> <file>` | Upload image to task |
 | `kaneo t asset <id>` | Download attachment |
 
-> Commands marked with `[project_id]` use the linked project from `.kaneo.json` when omitted.
+> `task ls` and `task export` accept an optional project ID positional. All other project-dependent commands use the linked project from `.kaneo.json` or `-p` flag.
 
 ### Columns
 
 | Command | Description |
 |---------|-------------|
 | `kaneo col ls [project_id]` | List columns |
-| `kaneo col create [project_id] <name>` | Create column |
+| `kaneo col create <name>` | Create column (uses linked project) |
 | `kaneo col update <id>` | Update column |
-| `kaneo col reorder [project_id] <ids>` | Reorder columns |
+| `kaneo col reorder <ids>` | Reorder columns (uses linked project) |
 | `kaneo col delete <id>` | Delete column |
 
 ### Labels
