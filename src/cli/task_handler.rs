@@ -222,12 +222,13 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
         }
 
         TaskCommand::Delete { id } => {
-            let task: Task = client.delete(&format!("/task/{id}")).await?;
+            let result: serde_json::Value = client.delete(&format!("/task/{id}")).await?;
 
             if json {
-                output::json_output(&task);
+                output::json_output(&result);
             } else {
-                output::success(false, &format!("Deleted task '{}'", task.title));
+                let title = result.get("title").and_then(|v| v.as_str()).unwrap_or(&id);
+                output::success(false, &format!("Deleted task '{title}'"));
             }
         }
 

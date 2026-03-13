@@ -89,12 +89,13 @@ pub async fn run(args: LabelArgs, ctx: &ResolvedContext, json: bool) -> anyhow::
         }
 
         LabelCommand::Delete { id } => {
-            let label: Label = client.delete(&format!("/label/{id}")).await?;
+            let result: serde_json::Value = client.delete(&format!("/label/{id}")).await?;
 
             if json {
-                output::json_output(&label);
+                output::json_output(&result);
             } else {
-                output::success(false, &format!("Deleted label '{}'", label.name));
+                let name = result.get("name").and_then(|v| v.as_str()).unwrap_or(&id);
+                output::success(false, &format!("Deleted label '{name}'"));
             }
         }
     }

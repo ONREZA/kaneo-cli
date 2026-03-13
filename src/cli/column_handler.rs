@@ -136,12 +136,13 @@ pub async fn run(args: ColumnArgs, ctx: &ResolvedContext, json: bool) -> anyhow:
         }
 
         ColumnCommand::Delete { id } => {
-            let col: Column = client.delete(&format!("/column/{id}")).await?;
+            let result: serde_json::Value = client.delete(&format!("/column/{id}")).await?;
 
             if json {
-                output::json_output(&col);
+                output::json_output(&result);
             } else {
-                output::success(false, &format!("Deleted column '{}'", col.name));
+                let name = result.get("name").and_then(|v| v.as_str()).unwrap_or(&id);
+                output::success(false, &format!("Deleted column '{name}'"));
             }
         }
     }

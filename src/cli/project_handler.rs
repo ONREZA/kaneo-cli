@@ -108,12 +108,13 @@ pub async fn run(args: ProjectArgs, ctx: &ResolvedContext, json: bool) -> anyhow
         }
 
         ProjectCommand::Delete { id } => {
-            let project: Project = client.delete(&format!("/project/{id}")).await?;
+            let result: serde_json::Value = client.delete(&format!("/project/{id}")).await?;
 
             if json {
-                output::json_output(&project);
+                output::json_output(&result);
             } else {
-                output::success(false, &format!("Deleted project '{}'", project.name));
+                let name = result.get("name").and_then(|v| v.as_str()).unwrap_or(&id);
+                output::success(false, &format!("Deleted project '{name}'"));
             }
         }
     }
