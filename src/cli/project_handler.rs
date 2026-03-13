@@ -1,5 +1,5 @@
-use crate::api::types::{CreateProjectBody, Project, UpdateProjectBody};
 use crate::api::ApiClient;
+use crate::api::types::{CreateProjectBody, Project, UpdateProjectBody};
 use crate::auth::{self, ResolvedContext};
 use crate::cli::{ProjectArgs, ProjectCommand};
 use crate::output;
@@ -10,9 +10,8 @@ pub async fn run(args: ProjectArgs, ctx: &ResolvedContext, json: bool) -> anyhow
     match args.command {
         ProjectCommand::List => {
             let ws = auth::require_workspace(ctx)?;
-            let projects: Vec<Project> = client
-                .get_query("/project", &[("workspaceId", ws)])
-                .await?;
+            let projects: Vec<Project> =
+                client.get_query("/project", &[("workspaceId", ws)]).await?;
 
             if json {
                 output::json_output(&projects);
@@ -30,10 +29,10 @@ pub async fn run(args: ProjectArgs, ctx: &ResolvedContext, json: bool) -> anyhow
                         bold.apply_to(&p.name),
                         dim.apply_to(&p.id),
                     );
-                    if let Some(desc) = &p.description {
-                        if !desc.is_empty() {
-                            eprintln!("    {}", dim.apply_to(desc));
-                        }
+                    if let Some(desc) = &p.description
+                        && !desc.is_empty()
+                    {
+                        eprintln!("    {}", dim.apply_to(desc));
                     }
                 }
             }
@@ -51,10 +50,10 @@ pub async fn run(args: ProjectArgs, ctx: &ResolvedContext, json: bool) -> anyhow
                 eprintln!("  {icon} {}", bold.apply_to(&project.name));
                 eprintln!("  {} {}", dim.apply_to("id:"), project.id);
                 eprintln!("  {} {}", dim.apply_to("slug:"), project.slug);
-                if let Some(desc) = &project.description {
-                    if !desc.is_empty() {
-                        eprintln!("  {} {desc}", dim.apply_to("desc:"));
-                    }
+                if let Some(desc) = &project.description
+                    && !desc.is_empty()
+                {
+                    eprintln!("  {} {desc}", dim.apply_to("desc:"));
                 }
                 let public = project.is_public.unwrap_or(false);
                 eprintln!("  {} {public}", dim.apply_to("public:"));
@@ -75,7 +74,10 @@ pub async fn run(args: ProjectArgs, ctx: &ResolvedContext, json: bool) -> anyhow
             if json {
                 output::json_output(&project);
             } else {
-                output::success(false, &format!("Created project '{}' ({})", project.name, project.id));
+                output::success(
+                    false,
+                    &format!("Created project '{}' ({})", project.name, project.id),
+                );
             }
         }
 

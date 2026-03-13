@@ -1,5 +1,5 @@
-use crate::api::types::Activity;
 use crate::api::ApiClient;
+use crate::api::types::Activity;
 use crate::auth::ResolvedContext;
 use crate::cli::{ActivityArgs, ActivityCommand};
 use crate::output;

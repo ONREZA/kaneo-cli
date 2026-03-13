@@ -53,6 +53,7 @@ pub fn prompt_input(label: &str) -> anyhow::Result<String> {
     Ok(input.trim().to_string())
 }
 
+#[allow(dead_code)]
 pub fn prompt_secret(label: &str) -> anyhow::Result<String> {
     let cyan = Style::new().cyan();
     eprint!("  {} ", cyan.apply_to(format!("{label}:")));
@@ -62,6 +63,7 @@ pub fn prompt_secret(label: &str) -> anyhow::Result<String> {
     Ok(input.trim().to_string())
 }
 
+#[allow(dead_code)]
 fn rpassword_stub() -> anyhow::Result<String> {
     let mut input = String::new();
     std::io::stdin().read_line(&mut input)?;

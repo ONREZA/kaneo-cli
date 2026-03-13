@@ -91,9 +91,7 @@ async fn run(cli: Cli, json: bool) -> anyhow::Result<()> {
             // api-check only needs the URL, not auth — try resolve but fall back to URL-only
             let ctx = auth::resolve_context(token, api_url, workspace).unwrap_or_else(|_| {
                 auth::ResolvedContext {
-                    api_url: api_url
-                        .unwrap_or("https://cloud.kaneo.app")
-                        .to_string(),
+                    api_url: api_url.unwrap_or("https://cloud.kaneo.app").to_string(),
                     api_key: String::new(),
                     workspace_id: None,
                 }

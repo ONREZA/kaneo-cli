@@ -1,7 +1,7 @@
 use anyhow::{Context, bail};
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
-use serde::de::DeserializeOwned;
+use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 pub struct ApiClient {
     client: reqwest::Client,
@@ -104,6 +104,7 @@ impl ApiClient {
         handle_response(resp, "PUT", &url).await
     }
 
+    #[allow(dead_code)]
     pub async fn patch<B: Serialize, T: DeserializeOwned>(
         &self,
         path: &str,
@@ -231,10 +232,10 @@ async fn handle_response<T: DeserializeOwned>(
             .unwrap_or_else(|_| "<unreadable body>".into());
 
         // Try to extract a message from JSON error response
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&body) {
-            if let Some(msg) = val.get("message").and_then(|m| m.as_str()) {
-                bail!("{method} {url} → {status}: {msg}");
-            }
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&body)
+            && let Some(msg) = val.get("message").and_then(|m| m.as_str())
+        {
+            bail!("{method} {url} → {status}: {msg}");
         }
 
         bail!("{method} {url} → {status}: {body}");

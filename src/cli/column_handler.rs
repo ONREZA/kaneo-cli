@@ -1,5 +1,5 @@
-use crate::api::types::{Column, CreateColumnBody};
 use crate::api::ApiClient;
+use crate::api::types::{Column, CreateColumnBody};
 use crate::auth::ResolvedContext;
 use crate::cli::{ColumnArgs, ColumnCommand};
 use crate::output;

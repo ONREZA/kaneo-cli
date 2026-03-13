@@ -76,9 +76,18 @@ const EXPECTED_OPERATIONS: &[(&str, &str)] = &[
     ("updateOrganizationMemberRole", "workspace update-role"),
     ("listOrganizationMembers", "workspace members"),
     ("listOrganizationInvitations", "workspace invitations"),
-    ("acceptOrganizationInvitation", "workspace accept-invitation"),
-    ("rejectOrganizationInvitation", "workspace reject-invitation"),
-    ("cancelOrganizationInvitation", "workspace cancel-invitation"),
+    (
+        "acceptOrganizationInvitation",
+        "workspace accept-invitation",
+    ),
+    (
+        "rejectOrganizationInvitation",
+        "workspace reject-invitation",
+    ),
+    (
+        "cancelOrganizationInvitation",
+        "workspace cancel-invitation",
+    ),
     ("leaveOrganization", "workspace leave"),
     ("setOrganizationActive", "workspace set-active"),
     ("checkOrganizationSlug", "workspace check-slug"),

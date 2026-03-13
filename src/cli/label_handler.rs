@@ -1,5 +1,5 @@
-use crate::api::types::{CreateLabelBody, Label};
 use crate::api::ApiClient;
+use crate::api::types::{CreateLabelBody, Label};
 use crate::auth::{self, ResolvedContext};
 use crate::cli::{LabelArgs, LabelCommand};
 use crate::output;
@@ -77,7 +77,9 @@ pub async fn run(args: LabelArgs, ctx: &ResolvedContext, json: bool) -> anyhow::
                 name: String,
                 color: String,
             }
-            let label: Label = client.put(&format!("/label/{id}"), &Body { name, color }).await?;
+            let label: Label = client
+                .put(&format!("/label/{id}"), &Body { name, color })
+                .await?;
 
             if json {
                 output::json_output(&label);

@@ -9,9 +9,8 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
 
     match args.command {
         WorkspaceCommand::List => {
-            let result: serde_json::Value = client
-                .get("/auth/organization/list-organizations")
-                .await?;
+            let result: serde_json::Value =
+                client.get("/auth/organization/list-organizations").await?;
 
             if json {
                 output::json_output(&result);
@@ -42,10 +41,14 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
             let ws_id = id
                 .as_deref()
                 .or(ctx.workspace_id.as_deref())
-                .ok_or_else(|| anyhow::anyhow!("workspace ID required (--workspace or argument)"))?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!("workspace ID required (--workspace or argument)")
+                })?;
 
             let result: serde_json::Value = client
-                .get(&format!("/auth/organization/get-full-organization?organizationId={ws_id}"))
+                .get(&format!(
+                    "/auth/organization/get-full-organization?organizationId={ws_id}"
+                ))
                 .await?;
 
             if json {
@@ -77,7 +80,12 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
             }
         }
 
-        WorkspaceCommand::Update { id, name, slug, logo } => {
+        WorkspaceCommand::Update {
+            id,
+            name,
+            slug,
+            logo,
+        } => {
             let ws_id = id
                 .as_deref()
                 .or(ctx.workspace_id.as_deref())
@@ -100,9 +108,7 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
                 "data": data,
             });
 
-            let result: serde_json::Value = client
-                .post("/auth/organization/update", &body)
-                .await?;
+            let result: serde_json::Value = client.post("/auth/organization/update", &body).await?;
 
             if json {
                 output::json_output(&result);
@@ -113,9 +119,7 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
 
         WorkspaceCommand::Delete { id } => {
             let body = serde_json::json!({ "organizationId": id });
-            let result: serde_json::Value = client
-                .post("/auth/organization/delete", &body)
-                .await?;
+            let result: serde_json::Value = client.post("/auth/organization/delete", &body).await?;
 
             if json {
                 output::json_output(&result);
@@ -131,7 +135,9 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
                 .ok_or_else(|| anyhow::anyhow!("workspace ID required"))?;
 
             let result: serde_json::Value = client
-                .get(&format!("/auth/organization/get-full-organization?organizationId={ws_id}"))
+                .get(&format!(
+                    "/auth/organization/get-full-organization?organizationId={ws_id}"
+                ))
                 .await?;
 
             let members = result
@@ -222,9 +228,7 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
                 .ok_or_else(|| anyhow::anyhow!("workspace ID required"))?;
 
             let body = serde_json::json!({ "organizationId": ws_id });
-            let result: serde_json::Value = client
-                .post("/auth/organization/leave", &body)
-                .await?;
+            let result: serde_json::Value = client.post("/auth/organization/leave", &body).await?;
 
             if json {
                 output::json_output(&result);
@@ -235,9 +239,8 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
 
         WorkspaceCommand::SetActive { id } => {
             let body = serde_json::json!({ "organizationId": id });
-            let result: serde_json::Value = client
-                .post("/auth/organization/set-active", &body)
-                .await?;
+            let result: serde_json::Value =
+                client.post("/auth/organization/set-active", &body).await?;
 
             if json {
                 output::json_output(&result);
@@ -248,14 +251,16 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
 
         WorkspaceCommand::CheckSlug { slug } => {
             let body = serde_json::json!({ "slug": slug });
-            let result: serde_json::Value = client
-                .post("/auth/organization/check-slug", &body)
-                .await?;
+            let result: serde_json::Value =
+                client.post("/auth/organization/check-slug", &body).await?;
 
             if json {
                 output::json_output(&result);
             } else {
-                let available = result.get("status").and_then(|v| v.as_bool()).unwrap_or(false);
+                let available = result
+                    .get("status")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
                 if available {
                     output::success(false, &format!("Slug '{slug}' is available"));
                 } else {
@@ -271,7 +276,9 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
                 .ok_or_else(|| anyhow::anyhow!("workspace ID required"))?;
 
             let result: serde_json::Value = client
-                .get(&format!("/auth/organization/list-invitations?organizationId={ws_id}"))
+                .get(&format!(
+                    "/auth/organization/list-invitations?organizationId={ws_id}"
+                ))
                 .await?;
 
             if json {
@@ -285,7 +292,10 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
                         for i in inv {
                             let email = i.get("email").and_then(|v| v.as_str()).unwrap_or("?");
                             let role = i.get("role").and_then(|v| v.as_str()).unwrap_or("member");
-                            let status = i.get("status").and_then(|v| v.as_str()).unwrap_or("pending");
+                            let status = i
+                                .get("status")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("pending");
                             let id = i.get("id").and_then(|v| v.as_str()).unwrap_or("");
                             eprintln!(
                                 "  {} {} {} {}",

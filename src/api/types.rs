@@ -65,6 +65,7 @@ pub struct CreateTaskBody {
     pub user_id: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateTaskBody {
@@ -175,6 +176,7 @@ pub struct TimeEntry {
 
 // --- Search ---
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
@@ -183,6 +185,7 @@ pub struct SearchResult {
 
 // --- Workspace (from better-auth organization) ---
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Workspace {
@@ -196,6 +199,7 @@ pub struct Workspace {
     pub metadata: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceMember {
@@ -206,6 +210,7 @@ pub struct WorkspaceMember {
 
 // --- Tasks with columns (board view) ---
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BoardColumn {
@@ -239,6 +244,7 @@ pub struct SessionUser {
 
 // --- Config ---
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServerConfig {

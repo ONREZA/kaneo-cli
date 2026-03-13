@@ -1,6 +1,6 @@
+use crate::api::ApiClient;
 use crate::api::client::upload_to_presigned_url;
 use crate::api::types::{CreateTaskBody, Task};
-use crate::api::ApiClient;
 use crate::auth::ResolvedContext;
 use crate::cli::{TaskArgs, TaskCommand};
 use crate::output;
@@ -11,9 +11,7 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
 
     match args.command {
         TaskCommand::List { project_id } => {
-            let board: serde_json::Value = client
-                .get(&format!("/task/tasks/{project_id}"))
-                .await?;
+            let board: serde_json::Value = client.get(&format!("/task/tasks/{project_id}")).await?;
 
             if json {
                 output::json_output(&board);
@@ -107,20 +105,23 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 user_id: String,
             }
             let task: Task = client
-                .put(&format!("/task/assignee/{id}"), &Body { user_id: user_id.clone() })
+                .put(
+                    &format!("/task/assignee/{id}"),
+                    &Body {
+                        user_id: user_id.clone(),
+                    },
+                )
                 .await?;
 
             if json {
                 output::json_output(&task);
+            } else if user_id.is_empty() {
+                output::success(false, &format!("Unassigned task '{}'", task.title));
             } else {
-                if user_id.is_empty() {
-                    output::success(false, &format!("Unassigned task '{}'", task.title));
-                } else {
-                    output::success(
-                        false,
-                        &format!("Assigned task '{}' to {user_id}", task.title),
-                    );
-                }
+                output::success(
+                    false,
+                    &format!("Assigned task '{}' to {user_id}", task.title),
+                );
             }
         }
 
@@ -131,7 +132,12 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 due_date: Option<String>,
             }
             let task: Task = client
-                .put(&format!("/task/due-date/{id}"), &Body { due_date: date.clone() })
+                .put(
+                    &format!("/task/due-date/{id}"),
+                    &Body {
+                        due_date: date.clone(),
+                    },
+                )
                 .await?;
 
             if json {
@@ -139,7 +145,9 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             } else {
                 match date {
                     Some(d) => output::success(false, &format!("Task '{}' due → {d}", task.title)),
-                    None => output::success(false, &format!("Cleared due date for '{}'", task.title)),
+                    None => {
+                        output::success(false, &format!("Cleared due date for '{}'", task.title))
+                    }
                 }
             }
         }
@@ -187,9 +195,7 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
         }
 
         TaskCommand::Export { project_id } => {
-            let data: serde_json::Value = client
-                .get(&format!("/task/export/{project_id}"))
-                .await?;
+            let data: serde_json::Value = client.get(&format!("/task/export/{project_id}")).await?;
 
             output::json_output(&data);
         }
@@ -230,19 +236,14 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
         } => {
             // Step 1: Read file and determine content type
             let path = std::path::Path::new(&file);
-            let data = std::fs::read(path)
-                .map_err(|e| anyhow::anyhow!("reading {file}: {e}"))?;
+            let data = std::fs::read(path).map_err(|e| anyhow::anyhow!("reading {file}: {e}"))?;
 
             let filename = path
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| "upload".to_string());
 
-            let content_type = match path
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("")
-            {
+            let content_type = match path.extension().and_then(|e| e.to_str()).unwrap_or("") {
                 "png" => "image/png",
                 "jpg" | "jpeg" => "image/jpeg",
                 "gif" => "image/gif",
@@ -322,10 +323,7 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                     .get("url")
                     .and_then(|v| v.as_str())
                     .unwrap_or("(created)");
-                let asset_id = result
-                    .get("id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let asset_id = result.get("id").and_then(|v| v.as_str()).unwrap_or("");
                 output::success(
                     false,
                     &format!("Uploaded '{filename}' → {asset_id}\n    {asset_url}"),
@@ -413,7 +411,10 @@ fn print_board(board: &serde_json::Value) {
         eprintln!();
     } else {
         // Might be a different structure, just dump it
-        eprintln!("{}", serde_json::to_string_pretty(board).unwrap_or_default());
+        eprintln!(
+            "{}",
+            serde_json::to_string_pretty(board).unwrap_or_default()
+        );
     }
 }
 
@@ -444,9 +445,9 @@ fn print_task(task: &Task) {
     if let Some(dd) = &task.due_date {
         eprintln!("  {} {dd}", dim.apply_to("due:"));
     }
-    if let Some(desc) = &task.description {
-        if !desc.is_empty() {
-            eprintln!("  {} {desc}", dim.apply_to("desc:"));
-        }
+    if let Some(desc) = &task.description
+        && !desc.is_empty()
+    {
+        eprintln!("  {} {desc}", dim.apply_to("desc:"));
     }
 }

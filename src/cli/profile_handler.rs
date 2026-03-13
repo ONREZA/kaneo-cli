@@ -65,10 +65,7 @@ pub fn run(args: ProfileArgs, json: bool) -> anyhow::Result<()> {
 
         ProfileCommand::Current => {
             let config = AuthConfig::load()?;
-            let name = config
-                .default_profile
-                .as_deref()
-                .unwrap_or("default");
+            let name = config.default_profile.as_deref().unwrap_or("default");
             match config.profiles.get(name) {
                 Some(profile) => {
                     if json {
@@ -82,7 +79,11 @@ pub fn run(args: ProfileArgs, json: bool) -> anyhow::Result<()> {
                         let bold = console::Style::new().bold();
                         eprintln!("  {} {}", dim.apply_to("profile:"), bold.apply_to(name));
                         eprintln!("  {} {}", dim.apply_to("url:"), profile.api_url);
-                        eprintln!("  {} {}…", dim.apply_to("key:"), &profile.api_key[..8.min(profile.api_key.len())]);
+                        eprintln!(
+                            "  {} {}…",
+                            dim.apply_to("key:"),
+                            &profile.api_key[..8.min(profile.api_key.len())]
+                        );
                         if let Some(ws) = &profile.workspace_id {
                             eprintln!("  {} {ws}", dim.apply_to("workspace:"));
                         }
@@ -99,13 +100,12 @@ pub fn run(args: ProfileArgs, json: bool) -> anyhow::Result<()> {
             profile,
         } => {
             let mut config = AuthConfig::load()?;
-            let name = profile
-                .unwrap_or_else(|| {
-                    config
-                        .default_profile
-                        .clone()
-                        .unwrap_or_else(|| "default".to_string())
-                });
+            let name = profile.unwrap_or_else(|| {
+                config
+                    .default_profile
+                    .clone()
+                    .unwrap_or_else(|| "default".to_string())
+            });
             let p = config
                 .profiles
                 .get_mut(&name)

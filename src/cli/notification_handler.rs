@@ -1,5 +1,5 @@
-use crate::api::types::Notification;
 use crate::api::ApiClient;
+use crate::api::types::Notification;
 use crate::auth::ResolvedContext;
 use crate::cli::{NotificationArgs, NotificationCommand};
 use crate::output;
@@ -33,10 +33,10 @@ pub async fn run(args: NotificationArgs, ctx: &ResolvedContext, json: bool) -> a
                         bold.apply_to(&n.title),
                         dim.apply_to(&n.created_at),
                     );
-                    if let Some(content) = &n.content {
-                        if !content.is_empty() {
-                            eprintln!("    {}", dim.apply_to(content));
-                        }
+                    if let Some(content) = &n.content
+                        && !content.is_empty()
+                    {
+                        eprintln!("    {}", dim.apply_to(content));
                     }
                 }
             }
@@ -53,9 +53,7 @@ pub async fn run(args: NotificationArgs, ctx: &ResolvedContext, json: bool) -> a
         }
 
         NotificationCommand::ReadAll => {
-            let result: serde_json::Value = client
-                .patch_empty("/notification/read-all")
-                .await?;
+            let result: serde_json::Value = client.patch_empty("/notification/read-all").await?;
 
             if json {
                 output::json_output(&result);
@@ -66,9 +64,7 @@ pub async fn run(args: NotificationArgs, ctx: &ResolvedContext, json: bool) -> a
         }
 
         NotificationCommand::ClearAll => {
-            let result: serde_json::Value = client
-                .delete("/notification/clear-all")
-                .await?;
+            let result: serde_json::Value = client.delete("/notification/clear-all").await?;
 
             if json {
                 output::json_output(&result);

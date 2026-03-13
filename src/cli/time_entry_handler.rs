@@ -1,5 +1,5 @@
-use crate::api::types::TimeEntry;
 use crate::api::ApiClient;
+use crate::api::types::TimeEntry;
 use crate::auth::ResolvedContext;
 use crate::cli::{TimeEntryArgs, TimeEntryCommand};
 use crate::output;
@@ -10,9 +10,8 @@ pub async fn run(args: TimeEntryArgs, ctx: &ResolvedContext, json: bool) -> anyh
 
     match args.command {
         TimeEntryCommand::List { task_id } => {
-            let entries: Vec<TimeEntry> = client
-                .get(&format!("/time-entry/task/{task_id}"))
-                .await?;
+            let entries: Vec<TimeEntry> =
+                client.get(&format!("/time-entry/task/{task_id}")).await?;
 
             if json {
                 output::json_output(&entries);
@@ -26,7 +25,7 @@ pub async fn run(args: TimeEntryArgs, ctx: &ResolvedContext, json: bool) -> anyh
                 for e in &entries {
                     let dur = e
                         .duration
-                        .map(|d| format_duration(d))
+                        .map(format_duration)
                         .unwrap_or_else(|| "running…".into());
                     let desc = e.description.as_deref().unwrap_or("");
                     eprintln!(
@@ -50,7 +49,7 @@ pub async fn run(args: TimeEntryArgs, ctx: &ResolvedContext, json: bool) -> anyh
                 let bold = console::Style::new().bold();
                 let dur = entry
                     .duration
-                    .map(|d| format_duration(d))
+                    .map(format_duration)
                     .unwrap_or_else(|| "running…".into());
                 eprintln!("  {} {}", dim.apply_to("id:"), entry.id);
                 eprintln!("  {} {}", dim.apply_to("task:"), entry.task_id);
@@ -59,10 +58,10 @@ pub async fn run(args: TimeEntryArgs, ctx: &ResolvedContext, json: bool) -> anyh
                 if let Some(end) = &entry.end_time {
                     eprintln!("  {} {end}", dim.apply_to("end:"));
                 }
-                if let Some(desc) = &entry.description {
-                    if !desc.is_empty() {
-                        eprintln!("  {} {desc}", dim.apply_to("desc:"));
-                    }
+                if let Some(desc) = &entry.description
+                    && !desc.is_empty()
+                {
+                    eprintln!("  {} {desc}", dim.apply_to("desc:"));
                 }
             }
         }

@@ -35,8 +35,7 @@ impl AuthConfig {
                 .with_context(|| format!("creating {}", parent.display()))?;
         }
         let data = serde_json::to_string_pretty(self)?;
-        std::fs::write(&path, data)
-            .with_context(|| format!("writing {}", path.display()))?;
+        std::fs::write(&path, data).with_context(|| format!("writing {}", path.display()))?;
 
         #[cfg(unix)]
         {
@@ -48,10 +47,7 @@ impl AuthConfig {
     }
 
     pub fn active_profile(&self) -> anyhow::Result<&Profile> {
-        let name = self
-            .default_profile
-            .as_deref()
-            .unwrap_or("default");
+        let name = self.default_profile.as_deref().unwrap_or("default");
 
         self.profiles
             .get(name)
@@ -75,9 +71,7 @@ pub fn resolve_context(
 
     // Explicit flags take priority
     if let Some(key) = token {
-        let url = api_url
-            .or(env_api_url.as_deref())
-            .unwrap_or(default_url);
+        let url = api_url.or(env_api_url.as_deref()).unwrap_or(default_url);
         return Ok(ResolvedContext {
             api_url: url.to_string(),
             api_key: key.to_string(),
@@ -87,9 +81,7 @@ pub fn resolve_context(
 
     // Env vars
     if let Ok(key) = std::env::var("KANEO_API_KEY") {
-        let url = api_url
-            .or(env_api_url.as_deref())
-            .unwrap_or(default_url);
+        let url = api_url.or(env_api_url.as_deref()).unwrap_or(default_url);
         return Ok(ResolvedContext {
             api_url: url.to_string(),
             api_key: key,
@@ -120,7 +112,7 @@ pub fn require_workspace(ctx: &ResolvedContext) -> anyhow::Result<&str> {
 }
 
 fn config_path() -> anyhow::Result<PathBuf> {
-    let dir = dirs::config_dir()
-        .ok_or_else(|| anyhow::anyhow!("cannot determine config directory"))?;
+    let dir =
+        dirs::config_dir().ok_or_else(|| anyhow::anyhow!("cannot determine config directory"))?;
     Ok(dir.join("kaneo").join("config.json"))
 }
