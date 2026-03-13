@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-03-13
+
+### ✨ Features
+
+- **cli:** add .kaneo.json context system with link/unlink/context commands ([29a1778](https://github.com/ONREZA/kaneo-cli/commit/29a17780f1db542e857a2afa56676500bf2d9a34))
+
+### 🐛 Bug Fixes
+
+- **deps:** upgrade commitlint to v20, pin tinyexec 0.3.2 via override ([9221df1](https://github.com/ONREZA/kaneo-cli/commit/9221df194ea95709bbb4f04d6eb18beac9395ff5))
+
+### ♻️ Changed
+
+- **deps:** replace commitlint with cocogitto ([e22a38a](https://github.com/ONREZA/kaneo-cli/commit/e22a38aa74a80adf9c5c5809e1f1ce1500931eb3))
+
+### 🔧 Changed
+
+- **deps:** update all dependencies and GitHub Actions to latest ([d52acfb](https://github.com/ONREZA/kaneo-cli/commit/d52acfb14b4a76c9597a30aaeae9c0fd8dac8e11))
+
 ## [0.2.0] - 2026-03-13
 
 ### ✨ Features
