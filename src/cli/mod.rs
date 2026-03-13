@@ -365,7 +365,8 @@ pub enum TaskCommand {
         /// Priority: no-priority, low, medium, high, urgent
         #[arg(long, default_value = "no-priority")]
         priority: String,
-        /// Status (column name, e.g. "todo", "in-progress")
+        /// Column name to place the task in (e.g. "backlog", "todo", "in-progress").
+        /// Note: "planned" puts the task in the planned backlog, not a board column.
         #[arg(long, default_value = "backlog")]
         status: String,
         /// Due date (ISO format)

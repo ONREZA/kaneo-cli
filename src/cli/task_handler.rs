@@ -97,13 +97,19 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 status: String,
             }
             let task: Task = client
-                .put(&format!("/task/status/{id}"), &Body { status })
+                .put(
+                    &format!("/task/status/{id}"),
+                    &Body {
+                        status: status.clone(),
+                    },
+                )
                 .await?;
 
             if json {
                 output::json_output(&task);
             } else {
-                output::success(false, &format!("Task '{}' → {}", task.title, task.status));
+                // Use the requested status — server response may return stale value
+                output::success(false, &format!("Task '{}' → {}", task.title, status));
             }
         }
 
