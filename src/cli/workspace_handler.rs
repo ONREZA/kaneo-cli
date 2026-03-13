@@ -9,8 +9,7 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
 
     match args.command {
         WorkspaceCommand::List => {
-            let result: serde_json::Value =
-                client.get("/auth/organization/list-organizations").await?;
+            let result: serde_json::Value = client.get("/auth/organization/list").await?;
 
             if json {
                 output::json_output(&result);
@@ -361,7 +360,7 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
 }
 
 async fn select_workspace(client: &ApiClient) -> anyhow::Result<String> {
-    let orgs: Vec<serde_json::Value> = client.get("/auth/organization/list-organizations").await?;
+    let orgs: Vec<serde_json::Value> = client.get("/auth/organization/list").await?;
 
     if orgs.is_empty() {
         anyhow::bail!("no workspaces found");

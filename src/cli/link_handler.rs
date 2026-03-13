@@ -52,7 +52,7 @@ pub async fn run(args: LinkArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
 }
 
 async fn select_workspace(client: &ApiClient) -> anyhow::Result<String> {
-    let orgs: Vec<serde_json::Value> = client.get("/auth/organization/list-organizations").await?;
+    let orgs: Vec<serde_json::Value> = client.get("/auth/organization/list").await?;
 
     if orgs.is_empty() {
         anyhow::bail!("no workspaces found");

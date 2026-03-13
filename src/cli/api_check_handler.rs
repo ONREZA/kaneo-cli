@@ -69,7 +69,7 @@ const EXPECTED_OPERATIONS: &[(&str, &str)] = &[
     ("createOrganization", "workspace create"),
     ("updateOrganization", "workspace update"),
     ("deleteOrganization", "workspace delete"),
-    ("listOrganization", "workspace ls"),
+    ("listOrganization", "workspace ls / link"),
     ("getOrganizationFullOrganization", "workspace get"),
     ("inviteOrganizationMember", "workspace invite"),
     ("removeOrganizationMember", "workspace remove-member"),
