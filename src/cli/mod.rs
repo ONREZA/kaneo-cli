@@ -2,6 +2,7 @@ pub mod activity_handler;
 pub mod api_check_handler;
 pub mod column_handler;
 pub mod label_handler;
+pub mod link_handler;
 pub mod login_handler;
 pub mod notification_handler;
 pub mod profile_handler;
@@ -248,8 +249,8 @@ pub enum WorkspaceCommand {
     },
     /// Set active workspace
     SetActive {
-        /// Workspace ID
-        id: String,
+        /// Workspace ID (interactive if omitted)
+        id: Option<String>,
     },
     /// Check if a slug is available
     CheckSlug {
@@ -374,15 +375,15 @@ pub enum TaskCommand {
     Status {
         /// Task ID
         id: String,
-        /// New status
-        status: String,
+        /// New status (interactive if omitted)
+        status: Option<String>,
     },
     /// Update task priority
     Priority {
         /// Task ID
         id: String,
-        /// New priority: no-priority, low, medium, high, urgent
-        priority: String,
+        /// New priority: no-priority, low, medium, high, urgent (interactive if omitted)
+        priority: Option<String>,
     },
     /// Update task assignee
     Assign {

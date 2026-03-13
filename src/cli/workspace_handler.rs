@@ -238,14 +238,20 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
         }
 
         WorkspaceCommand::SetActive { id } => {
-            let body = serde_json::json!({ "organizationId": id });
+            let ws_id = match id {
+                Some(id) => id,
+                None if output::is_interactive() => select_workspace(&client).await?,
+                None => anyhow::bail!("workspace ID required (or run interactively in a terminal)"),
+            };
+
+            let body = serde_json::json!({ "organizationId": ws_id });
             let result: serde_json::Value =
                 client.post("/auth/organization/set-active", &body).await?;
 
             if json {
                 output::json_output(&result);
             } else {
-                output::success(false, &format!("Active workspace → {id}"));
+                output::success(false, &format!("Active workspace → {ws_id}"));
             }
         }
 
@@ -352,6 +358,31 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
     }
 
     Ok(())
+}
+
+async fn select_workspace(client: &ApiClient) -> anyhow::Result<String> {
+    let orgs: Vec<serde_json::Value> = client.get("/auth/organization/list-organizations").await?;
+
+    if orgs.is_empty() {
+        anyhow::bail!("no workspaces found");
+    }
+
+    let labels: Vec<String> = orgs
+        .iter()
+        .map(|o| {
+            let name = o.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+            let slug = o.get("slug").and_then(|v| v.as_str()).unwrap_or("");
+            format!("{name} ({slug})")
+        })
+        .collect();
+
+    let idx = output::select("Workspace", &labels)?;
+
+    orgs[idx]
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .ok_or_else(|| anyhow::anyhow!("workspace missing id"))
 }
 
 fn print_org_details(result: &serde_json::Value) {

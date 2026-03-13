@@ -1,10 +1,12 @@
 use crate::api::ApiClient;
 use crate::api::client::upload_to_presigned_url;
-use crate::api::types::{CreateTaskBody, Task};
+use crate::api::types::{Column, CreateTaskBody, Task};
 use crate::auth::{self, ResolvedContext};
 use crate::cli::{TaskArgs, TaskCommand};
 use crate::output;
 use serde::Serialize;
+
+const PRIORITIES: &[&str] = &["no-priority", "low", "medium", "high", "urgent"];
 
 fn resolve_project(arg: Option<String>, ctx: &ResolvedContext) -> anyhow::Result<String> {
     arg.or_else(|| ctx.project_id.clone())
@@ -71,6 +73,20 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
         }
 
         TaskCommand::Status { id, status } => {
+            let status = match status {
+                Some(s) => s,
+                None if output::is_interactive() => {
+                    // Fetch task to get project_id, then columns
+                    let current: Task = client.get(&format!("/task/{id}")).await?;
+                    let columns: Vec<Column> = client
+                        .get(&format!("/column/{}", current.project_id))
+                        .await?;
+                    let labels: Vec<String> = columns.iter().map(|c| c.name.clone()).collect();
+                    let idx = output::select("Status", &labels)?;
+                    labels[idx].clone()
+                }
+                None => anyhow::bail!("status required (or run interactively in a terminal)"),
+            };
             #[derive(Serialize)]
             struct Body {
                 status: String,
@@ -87,6 +103,15 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
         }
 
         TaskCommand::Priority { id, priority } => {
+            let priority = match priority {
+                Some(p) => p,
+                None if output::is_interactive() => {
+                    let labels: Vec<String> = PRIORITIES.iter().map(|s| (*s).to_string()).collect();
+                    let idx = output::select("Priority", &labels)?;
+                    labels[idx].clone()
+                }
+                None => anyhow::bail!("priority required (or run interactively in a terminal)"),
+            };
             #[derive(Serialize)]
             struct Body {
                 priority: String,

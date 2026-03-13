@@ -70,25 +70,8 @@ async fn run(cli: Cli, json: bool) -> anyhow::Result<()> {
             cli::profile_handler::run(args, json)?;
         }
         Command::Link(args) => {
-            let config = auth::LocalConfig {
-                workspace: args.workspace,
-                project: args.project,
-            };
-            let cwd = std::env::current_dir()?;
-            auth::write_local_config(&cwd, &config)?;
-            if json {
-                output::json_output(&serde_json::json!({
-                    "linked": true,
-                    "path": cwd.join(".kaneo.json").display().to_string(),
-                    "workspace": config.workspace,
-                    "project": config.project,
-                }));
-            } else {
-                output::success(
-                    false,
-                    &format!("Linked {}", cwd.join(".kaneo.json").display()),
-                );
-            }
+            let ctx = auth::resolve_context(token, api_url, workspace, project)?;
+            cli::link_handler::run(args, &ctx, json).await?;
         }
         Command::Unlink => {
             let cwd = std::env::current_dir()?;

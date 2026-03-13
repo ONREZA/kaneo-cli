@@ -1,4 +1,6 @@
 use console::Style;
+use dialoguer::FuzzySelect;
+use dialoguer::theme::ColorfulTheme;
 use serde::Serialize;
 use std::io::Write;
 
@@ -42,6 +44,21 @@ pub fn header(json: bool, title: &str) {
     }
     let bold = Style::new().bold();
     eprintln!("\n  {}", bold.apply_to(title));
+}
+
+/// Returns true if stderr is a TTY (interactive terminal).
+pub fn is_interactive() -> bool {
+    std::io::IsTerminal::is_terminal(&std::io::stderr())
+}
+
+/// Interactive fuzzy-select from a list of items. Returns the selected index.
+pub fn select(prompt: &str, items: &[String]) -> anyhow::Result<usize> {
+    FuzzySelect::with_theme(&ColorfulTheme::default())
+        .with_prompt(prompt)
+        .items(items)
+        .default(0)
+        .interact()
+        .map_err(|e| anyhow::anyhow!("selection cancelled: {e}"))
 }
 
 pub fn prompt_input(label: &str) -> anyhow::Result<String> {
