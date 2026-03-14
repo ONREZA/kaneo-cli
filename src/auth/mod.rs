@@ -231,3 +231,329 @@ fn config_path() -> anyhow::Result<PathBuf> {
         dirs::config_dir().ok_or_else(|| anyhow::anyhow!("cannot determine config directory"))?;
     Ok(dir.join("kaneo").join("config.json"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    // --- find_local_configs ---
+
+    #[test]
+    fn find_configs_single_file() {
+        let tmp = TempDir::new().unwrap();
+        let cfg = LocalConfig {
+            workspace: Some("ws-1".into()),
+            project: Some("proj-1".into()),
+        };
+        fs::write(
+            tmp.path().join(".kaneo.json"),
+            serde_json::to_string(&cfg).unwrap(),
+        )
+        .unwrap();
+
+        let configs = find_local_configs(tmp.path(), tmp.path());
+        assert_eq!(configs.len(), 1);
+        assert_eq!(configs[0].workspace.as_deref(), Some("ws-1"));
+        assert_eq!(configs[0].project.as_deref(), Some("proj-1"));
+    }
+
+    #[test]
+    fn find_configs_nested_walk_up() {
+        let tmp = TempDir::new().unwrap();
+        let child = tmp.path().join("sub");
+        fs::create_dir(&child).unwrap();
+
+        fs::write(
+            tmp.path().join(".kaneo.json"),
+            r#"{"workspace":"ws-parent"}"#,
+        )
+        .unwrap();
+        fs::write(child.join(".kaneo.json"), r#"{"project":"proj-child"}"#).unwrap();
+
+        let configs = find_local_configs(&child, tmp.path());
+        assert_eq!(configs.len(), 2);
+        assert_eq!(configs[0].project.as_deref(), Some("proj-child"));
+        assert!(configs[0].workspace.is_none());
+        assert_eq!(configs[1].workspace.as_deref(), Some("ws-parent"));
+    }
+
+    #[test]
+    fn find_configs_no_files() {
+        let tmp = TempDir::new().unwrap();
+        let configs = find_local_configs(tmp.path(), tmp.path());
+        assert!(configs.is_empty());
+    }
+
+    #[test]
+    fn find_configs_invalid_json_skipped() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(".kaneo.json"), "not json").unwrap();
+        let configs = find_local_configs(tmp.path(), tmp.path());
+        assert!(configs.is_empty());
+    }
+
+    #[test]
+    fn find_configs_deeply_nested() {
+        let tmp = TempDir::new().unwrap();
+        let a = tmp.path().join("a");
+        let b = a.join("b");
+        let c = b.join("c");
+        fs::create_dir_all(&c).unwrap();
+
+        fs::write(tmp.path().join(".kaneo.json"), r#"{"workspace":"ws-root"}"#).unwrap();
+        fs::write(b.join(".kaneo.json"), r#"{"project":"proj-b"}"#).unwrap();
+        // a and c have no config
+
+        let configs = find_local_configs(&c, tmp.path());
+        assert_eq!(configs.len(), 2);
+        assert_eq!(configs[0].project.as_deref(), Some("proj-b"));
+        assert_eq!(configs[1].workspace.as_deref(), Some("ws-root"));
+    }
+
+    // --- merge_local_configs ---
+
+    #[test]
+    fn merge_closest_wins() {
+        let configs = vec![
+            LocalConfig {
+                workspace: Some("ws-close".into()),
+                project: Some("proj-close".into()),
+            },
+            LocalConfig {
+                workspace: Some("ws-far".into()),
+                project: Some("proj-far".into()),
+            },
+        ];
+        let merged = merge_local_configs(&configs);
+        assert_eq!(merged.workspace.as_deref(), Some("ws-close"));
+        assert_eq!(merged.project.as_deref(), Some("proj-close"));
+    }
+
+    #[test]
+    fn merge_fills_gaps_from_parent() {
+        let configs = vec![
+            LocalConfig {
+                workspace: None,
+                project: Some("proj-child".into()),
+            },
+            LocalConfig {
+                workspace: Some("ws-parent".into()),
+                project: None,
+            },
+        ];
+        let merged = merge_local_configs(&configs);
+        assert_eq!(merged.workspace.as_deref(), Some("ws-parent"));
+        assert_eq!(merged.project.as_deref(), Some("proj-child"));
+    }
+
+    #[test]
+    fn merge_empty_list() {
+        let merged = merge_local_configs(&[]);
+        assert!(merged.workspace.is_none());
+        assert!(merged.project.is_none());
+    }
+
+    #[test]
+    fn merge_all_none() {
+        let configs = vec![
+            LocalConfig {
+                workspace: None,
+                project: None,
+            },
+            LocalConfig {
+                workspace: None,
+                project: None,
+            },
+        ];
+        let merged = merge_local_configs(&configs);
+        assert!(merged.workspace.is_none());
+        assert!(merged.project.is_none());
+    }
+
+    // --- LocalConfig serde ---
+
+    #[test]
+    fn local_config_partial_deserialize() {
+        let cfg: LocalConfig = serde_json::from_str(r#"{"workspace":"ws-1"}"#).unwrap();
+        assert_eq!(cfg.workspace.as_deref(), Some("ws-1"));
+        assert!(cfg.project.is_none());
+    }
+
+    #[test]
+    fn local_config_empty_deserialize() {
+        let cfg: LocalConfig = serde_json::from_str("{}").unwrap();
+        assert!(cfg.workspace.is_none());
+        assert!(cfg.project.is_none());
+    }
+
+    #[test]
+    fn local_config_skip_none_on_serialize() {
+        let cfg = LocalConfig {
+            workspace: Some("ws".into()),
+            project: None,
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(json.contains("workspace"));
+        assert!(!json.contains("project"));
+    }
+
+    // --- AuthConfig ---
+
+    #[test]
+    fn auth_config_default_is_empty() {
+        let cfg = AuthConfig::default();
+        assert!(cfg.profiles.is_empty());
+        assert!(cfg.default_profile.is_none());
+    }
+
+    #[test]
+    fn auth_config_active_profile_default_name() {
+        let mut cfg = AuthConfig::default();
+        cfg.profiles.insert(
+            "default".into(),
+            Profile {
+                api_url: "https://example.com".into(),
+                api_key: "key".into(),
+                workspace_id: None,
+                project_id: None,
+            },
+        );
+        let profile = cfg.active_profile().unwrap();
+        assert_eq!(profile.api_url, "https://example.com");
+    }
+
+    #[test]
+    fn auth_config_active_profile_missing() {
+        let cfg = AuthConfig::default();
+        let err = cfg.active_profile().unwrap_err();
+        assert!(err.to_string().contains("no profile"));
+    }
+
+    #[test]
+    fn auth_config_active_profile_named() {
+        let mut cfg = AuthConfig::default();
+        cfg.default_profile = Some("work".into());
+        cfg.profiles.insert(
+            "work".into(),
+            Profile {
+                api_url: "https://work.example.com".into(),
+                api_key: "work-key".into(),
+                workspace_id: Some("ws-work".into()),
+                project_id: None,
+            },
+        );
+        let profile = cfg.active_profile().unwrap();
+        assert_eq!(profile.api_key, "work-key");
+        assert_eq!(profile.workspace_id.as_deref(), Some("ws-work"));
+    }
+
+    #[test]
+    fn auth_config_roundtrip_serde() {
+        let mut cfg = AuthConfig::default();
+        cfg.default_profile = Some("test".into());
+        cfg.profiles.insert(
+            "test".into(),
+            Profile {
+                api_url: "https://test.com".into(),
+                api_key: "secret".into(),
+                workspace_id: Some("ws".into()),
+                project_id: Some("proj".into()),
+            },
+        );
+        let json = serde_json::to_string(&cfg).unwrap();
+        let restored: AuthConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.default_profile.as_deref(), Some("test"));
+        let p = restored.profiles.get("test").unwrap();
+        assert_eq!(p.api_key, "secret");
+        assert_eq!(p.project_id.as_deref(), Some("proj"));
+    }
+
+    // --- require_workspace / require_project ---
+
+    #[test]
+    fn require_workspace_present() {
+        let ctx = ResolvedContext {
+            api_url: String::new(),
+            api_key: String::new(),
+            workspace_id: Some("ws".into()),
+            project_id: None,
+        };
+        assert_eq!(require_workspace(&ctx).unwrap(), "ws");
+    }
+
+    #[test]
+    fn require_workspace_missing() {
+        let ctx = ResolvedContext {
+            api_url: String::new(),
+            api_key: String::new(),
+            workspace_id: None,
+            project_id: None,
+        };
+        assert!(require_workspace(&ctx).is_err());
+    }
+
+    #[test]
+    fn require_project_present() {
+        let ctx = ResolvedContext {
+            api_url: String::new(),
+            api_key: String::new(),
+            workspace_id: None,
+            project_id: Some("proj".into()),
+        };
+        assert_eq!(require_project(&ctx).unwrap(), "proj");
+    }
+
+    #[test]
+    fn require_project_missing() {
+        let ctx = ResolvedContext {
+            api_url: String::new(),
+            api_key: String::new(),
+            workspace_id: None,
+            project_id: None,
+        };
+        assert!(require_project(&ctx).is_err());
+    }
+
+    // --- write_local_config + round-trip ---
+
+    #[test]
+    fn write_and_read_local_config() {
+        let tmp = TempDir::new().unwrap();
+        let cfg = LocalConfig {
+            workspace: Some("ws-rt".into()),
+            project: Some("proj-rt".into()),
+        };
+        write_local_config(tmp.path(), &cfg).unwrap();
+
+        let configs = find_local_configs(tmp.path(), tmp.path());
+        assert_eq!(configs.len(), 1);
+        assert_eq!(configs[0].workspace.as_deref(), Some("ws-rt"));
+        assert_eq!(configs[0].project.as_deref(), Some("proj-rt"));
+    }
+
+    // --- resolve_context (with explicit token) ---
+
+    #[test]
+    fn resolve_context_explicit_token() {
+        let ctx = resolve_context(
+            Some("my-key"),
+            Some("https://my.api"),
+            Some("ws-flag"),
+            Some("proj-flag"),
+        )
+        .unwrap();
+
+        assert_eq!(ctx.api_key, "my-key");
+        assert_eq!(ctx.api_url, "https://my.api");
+        assert_eq!(ctx.workspace_id.as_deref(), Some("ws-flag"));
+        assert_eq!(ctx.project_id.as_deref(), Some("proj-flag"));
+    }
+
+    #[test]
+    fn resolve_context_token_defaults_to_cloud() {
+        let ctx = resolve_context(Some("key"), None, None, None).unwrap();
+        assert_eq!(ctx.api_url, "https://cloud.kaneo.app");
+    }
+}

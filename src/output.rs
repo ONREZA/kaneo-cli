@@ -86,3 +86,34 @@ fn rpassword_stub() -> anyhow::Result<String> {
     std::io::stdin().read_line(&mut input)?;
     Ok(input)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn json_output_produces_valid_json() {
+        // json_output prints to stdout, but we can at least verify the
+        // serialization logic works for various types
+        let data = serde_json::json!({"key": "value", "num": 42});
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        assert!(json.contains("\"key\""));
+        assert!(json.contains("42"));
+    }
+
+    #[test]
+    fn json_output_vec() {
+        let data = vec!["a", "b", "c"];
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        let restored: Vec<String> = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn json_output_empty_struct() {
+        #[derive(Serialize)]
+        struct Empty {}
+        let json = serde_json::to_string_pretty(&Empty {}).unwrap();
+        assert_eq!(json, "{}");
+    }
+}

@@ -21,11 +21,32 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             project_id,
             status,
             priority,
+            assignee,
+            page,
+            limit,
         } => {
             let project_id = resolve_project(project_id, ctx)?;
-            let board: serde_json::Value = client.get(&format!("/task/tasks/{project_id}")).await?;
 
-            let board = filter_board(&board, status.as_deref(), priority.as_deref());
+            let mut query: Vec<(&str, String)> = Vec::new();
+            if let Some(s) = &status {
+                query.push(("status", s.clone()));
+            }
+            if let Some(p) = &priority {
+                query.push(("priority", p.clone()));
+            }
+            if let Some(a) = &assignee {
+                query.push(("assigneeId", a.clone()));
+            }
+            if let Some(l) = limit {
+                query.push(("limit", l.to_string()));
+            }
+            if let Some(p) = page {
+                query.push(("page", p.to_string()));
+            }
+
+            let board: serde_json::Value = client
+                .get_query(&format!("/task/tasks/{project_id}"), &query)
+                .await?;
 
             if json {
                 output::json_output(&board);
@@ -81,7 +102,6 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             let status = match status {
                 Some(s) => s,
                 None if output::is_interactive() => {
-                    // Fetch task to get project_id, then columns
                     let current: Task = client.get(&format!("/task/{id}")).await?;
                     let columns: Vec<Column> = client
                         .get(&format!("/column/{}", current.project_id))
@@ -97,19 +117,13 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 status: String,
             }
             let task: Task = client
-                .put(
-                    &format!("/task/status/{id}"),
-                    &Body {
-                        status: status.clone(),
-                    },
-                )
+                .put(&format!("/task/status/{id}"), &Body { status })
                 .await?;
 
             if json {
                 output::json_output(&task);
             } else {
-                // Use the requested status — server response may return stale value
-                output::success(false, &format!("Task '{}' → {}", task.title, status));
+                output::success(false, &format!("Task '{}' → {}", task.title, task.status));
             }
         }
 
@@ -228,13 +242,12 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
         }
 
         TaskCommand::Delete { id } => {
-            let result: serde_json::Value = client.delete(&format!("/task/{id}")).await?;
+            let task: Task = client.delete(&format!("/task/{id}")).await?;
 
             if json {
-                output::json_output(&result);
+                output::json_output(&task);
             } else {
-                let title = result.get("title").and_then(|v| v.as_str()).unwrap_or(&id);
-                output::success(false, &format!("Deleted task '{title}'"));
+                output::success(false, &format!("Deleted task '{}'", task.title));
             }
         }
 
@@ -280,7 +293,6 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             file,
             surface,
         } => {
-            // Step 1: Read file and determine content type
             let path = std::path::Path::new(&file);
             let data = std::fs::read(path).map_err(|e| anyhow::anyhow!("reading {file}: {e}"))?;
 
@@ -302,7 +314,6 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
 
             output::status(json, "↑", &format!("Uploading {filename} ({size} bytes)…"));
 
-            // Step 2: Get presigned upload URL from Kaneo
             #[derive(Serialize)]
             #[serde(rename_all = "camelCase")]
             struct UploadRequest {
@@ -335,10 +346,8 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 .ok_or_else(|| anyhow::anyhow!("no object key in response"))?
                 .to_string();
 
-            // Step 3: Upload directly to S3
             upload_to_presigned_url(presigned_url, data, content_type).await?;
 
-            // Step 4: Finalize — tell Kaneo the upload completed
             #[derive(Serialize)]
             #[serde(rename_all = "camelCase")]
             struct FinalizeRequest {
@@ -413,65 +422,11 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
     Ok(())
 }
 
-/// Client-side filtering of board data by status (column name) and/or priority.
-fn filter_board(
-    board: &serde_json::Value,
-    status: Option<&str>,
-    priority: Option<&str>,
-) -> serde_json::Value {
-    if status.is_none() && priority.is_none() {
-        return board.clone();
-    }
-
-    let columns_arr = board
-        .as_array()
-        .or_else(|| board.get("columns").and_then(|v| v.as_array()));
-
-    let Some(columns) = columns_arr else {
-        return board.clone();
-    };
-
-    let filtered: Vec<serde_json::Value> = columns
-        .iter()
-        .filter(|col| {
-            if let Some(s) = status {
-                let name = col.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                if !name.eq_ignore_ascii_case(s) {
-                    return false;
-                }
-            }
-            true
-        })
-        .map(|col| {
-            if let Some(p) = priority {
-                let mut col = col.clone();
-                if let Some(tasks) = col.get("tasks").and_then(|v| v.as_array()) {
-                    let filtered_tasks: Vec<&serde_json::Value> = tasks
-                        .iter()
-                        .filter(|t| {
-                            t.get("priority")
-                                .and_then(|v| v.as_str())
-                                .is_some_and(|tp| tp.eq_ignore_ascii_case(p))
-                        })
-                        .collect();
-                    col["tasks"] = serde_json::json!(filtered_tasks);
-                }
-                col
-            } else {
-                col.clone()
-            }
-        })
-        .collect();
-
-    serde_json::json!(filtered)
-}
-
 fn print_board(board: &serde_json::Value) {
     let bold = console::Style::new().bold();
     let dim = console::Style::new().dim();
     let cyan = console::Style::new().cyan();
 
-    // API may return [...] (array of columns) or { "columns": [...] }
     let columns_arr = board
         .as_array()
         .or_else(|| board.get("columns").and_then(|v| v.as_array()));
@@ -490,36 +445,81 @@ fn print_board(board: &serde_json::Value) {
 
             if let Some(tasks) = tasks {
                 for t in tasks {
-                    let title = t.get("title").and_then(|v| v.as_str()).unwrap_or("?");
-                    let id = t.get("id").and_then(|v| v.as_str()).unwrap_or("");
-                    let number = t.get("number").and_then(|v| v.as_i64()).unwrap_or(0);
-                    let priority = t.get("priority").and_then(|v| v.as_str()).unwrap_or("");
-
-                    let prio_icon = match priority {
-                        "urgent" => "🔴",
-                        "high" => "🟠",
-                        "medium" => "🟡",
-                        "low" => "🟢",
-                        _ => "⚪",
-                    };
-
-                    eprintln!(
-                        "    {prio_icon} {} {} {}",
-                        cyan.apply_to(format!("#{number}")),
-                        title,
-                        dim.apply_to(id),
-                    );
+                    print_task_row(t, &cyan, &dim);
                 }
             }
         }
+
+        // Show planned tasks if present
+        if let Some(planned) = board.get("plannedTasks").and_then(|v| v.as_array())
+            && !planned.is_empty()
+        {
+            eprintln!(
+                "\n  {} {}",
+                bold.apply_to("Planned"),
+                dim.apply_to(format!("({})", planned.len()))
+            );
+            for t in planned {
+                print_task_row(t, &cyan, &dim);
+            }
+        }
+
+        // Show archived tasks if present
+        if let Some(archived) = board.get("archivedTasks").and_then(|v| v.as_array())
+            && !archived.is_empty()
+        {
+            eprintln!(
+                "\n  {} {}",
+                bold.apply_to("Archived"),
+                dim.apply_to(format!("({})", archived.len()))
+            );
+            for t in archived {
+                print_task_row(t, &cyan, &dim);
+            }
+        }
+
+        // Show pagination info if present
+        if let Some(pag) = board.get("pagination") {
+            let page = pag.get("page").and_then(|v| v.as_i64()).unwrap_or(1);
+            let total_pages = pag.get("totalPages").and_then(|v| v.as_i64()).unwrap_or(1);
+            let total = pag.get("total").and_then(|v| v.as_i64()).unwrap_or(0);
+            if total_pages > 1 {
+                eprintln!(
+                    "\n  {} page {page}/{total_pages} ({total} total)",
+                    dim.apply_to("…"),
+                );
+            }
+        }
+
         eprintln!();
     } else {
-        // Might be a different structure, just dump it
         eprintln!(
             "{}",
             serde_json::to_string_pretty(board).unwrap_or_default()
         );
     }
+}
+
+fn print_task_row(t: &serde_json::Value, cyan: &console::Style, dim: &console::Style) {
+    let title = t.get("title").and_then(|v| v.as_str()).unwrap_or("?");
+    let id = t.get("id").and_then(|v| v.as_str()).unwrap_or("");
+    let number = t.get("number").and_then(|v| v.as_i64()).unwrap_or(0);
+    let priority = t.get("priority").and_then(|v| v.as_str()).unwrap_or("");
+
+    let prio_icon = match priority {
+        "urgent" => "🔴",
+        "high" => "🟠",
+        "medium" => "🟡",
+        "low" => "🟢",
+        _ => "⚪",
+    };
+
+    eprintln!(
+        "    {prio_icon} {} {} {}",
+        cyan.apply_to(format!("#{number}")),
+        title,
+        dim.apply_to(id),
+    );
 }
 
 fn print_task(task: &Task) {

@@ -1,7 +1,7 @@
 //! Integration test: validates that every route in `api::routes::ALL_ROUTES`
 //! exists in the Kaneo OpenAPI specification.
 //!
-//! Runs against the public Kaneo Cloud instance. Requires network access.
+//! Runs against a Kaneo instance. Requires network access.
 //!
 //! ```
 //! cargo test --test validate_routes -- --ignored
@@ -19,7 +19,8 @@ fn normalise_path(path: &str) -> String {
 #[tokio::test]
 #[ignore] // requires network — run with: cargo test --test validate_routes -- --ignored
 async fn all_routes_exist_in_openapi_spec() {
-    let base_url = "https://cloud.kaneo.app";
+    let base_url =
+        std::env::var("KANEO_TEST_URL").unwrap_or_else(|_| "https://kaneo.onreza.ru".to_string());
     let openapi_url = format!("{base_url}/api/openapi");
 
     let resp = reqwest::get(&openapi_url)

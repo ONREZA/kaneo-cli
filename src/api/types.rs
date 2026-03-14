@@ -255,3 +255,163 @@ pub struct ServerConfig {
     pub has_google_sign_in: Option<bool>,
     pub has_discord_sign_in: Option<bool>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn task_deserialize_camel_case() {
+        let json = r#"{
+            "id": "abc",
+            "projectId": "proj-1",
+            "title": "Fix bug",
+            "status": "todo",
+            "priority": "high",
+            "createdAt": "2026-01-01",
+            "position": 1.0,
+            "number": 42
+        }"#;
+        let task: Task = serde_json::from_str(json).unwrap();
+        assert_eq!(task.id, "abc");
+        assert_eq!(task.project_id, "proj-1");
+        assert_eq!(task.number, Some(42));
+        assert!(task.description.is_none());
+        assert!(task.user_id.is_none());
+        assert!(task.due_date.is_none());
+    }
+
+    #[test]
+    fn task_roundtrip() {
+        let task = Task {
+            id: "t1".into(),
+            project_id: "p1".into(),
+            position: Some(0.0),
+            number: Some(1),
+            user_id: Some("u1".into()),
+            title: "Test".into(),
+            description: Some("desc".into()),
+            status: "done".into(),
+            priority: "low".into(),
+            due_date: Some("2026-12-31".into()),
+            created_at: "2026-01-01".into(),
+        };
+        let json = serde_json::to_string(&task).unwrap();
+        let restored: Task = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.id, task.id);
+        assert_eq!(restored.title, task.title);
+        assert_eq!(restored.user_id, task.user_id);
+    }
+
+    #[test]
+    fn create_task_body_skips_none() {
+        let body = CreateTaskBody {
+            title: "Test".into(),
+            description: "".into(),
+            priority: "low".into(),
+            status: "backlog".into(),
+            due_date: None,
+            user_id: None,
+        };
+        let json = serde_json::to_string(&body).unwrap();
+        assert!(!json.contains("dueDate"));
+        assert!(!json.contains("userId"));
+        assert!(json.contains("title"));
+    }
+
+    #[test]
+    fn create_task_body_includes_present() {
+        let body = CreateTaskBody {
+            title: "Test".into(),
+            description: "".into(),
+            priority: "low".into(),
+            status: "backlog".into(),
+            due_date: Some("2026-06-01".into()),
+            user_id: Some("user-1".into()),
+        };
+        let json = serde_json::to_string(&body).unwrap();
+        assert!(json.contains("dueDate"));
+        assert!(json.contains("userId"));
+    }
+
+    #[test]
+    fn project_deserialize() {
+        let json = r#"{
+            "id": "p1",
+            "workspaceId": "ws1",
+            "slug": "my-project",
+            "name": "My Project",
+            "createdAt": "2026-01-01"
+        }"#;
+        let project: Project = serde_json::from_str(json).unwrap();
+        assert_eq!(project.slug, "my-project");
+        assert!(project.icon.is_none());
+        assert!(project.description.is_none());
+        assert!(project.is_public.is_none());
+    }
+
+    #[test]
+    fn label_deserialize_with_task() {
+        let json = r##"{
+            "id": "l1",
+            "name": "bug",
+            "color": "#ff0000",
+            "createdAt": "2026-01-01",
+            "taskId": "t1",
+            "workspaceId": "ws1"
+        }"##;
+        let label: Label = serde_json::from_str(json).unwrap();
+        assert_eq!(label.task_id.as_deref(), Some("t1"));
+    }
+
+    #[test]
+    fn label_deserialize_without_task() {
+        let json = r##"{
+            "id": "l1",
+            "name": "feature",
+            "color": "#00ff00",
+            "createdAt": "2026-01-01",
+            "taskId": null,
+            "workspaceId": null
+        }"##;
+        let label: Label = serde_json::from_str(json).unwrap();
+        assert!(label.task_id.is_none());
+    }
+
+    #[test]
+    fn column_deserialize() {
+        let json = r#"{
+            "id": "c1",
+            "projectId": "p1",
+            "name": "Done",
+            "position": 2
+        }"#;
+        let col: Column = serde_json::from_str(json).unwrap();
+        assert_eq!(col.name, "Done");
+        assert_eq!(col.position, 2);
+        assert!(col.icon.is_none());
+        assert!(col.is_final.is_none());
+    }
+
+    #[test]
+    fn session_response_null_user() {
+        let json = r#"{"user": null, "session": null}"#;
+        let resp: SessionResponse = serde_json::from_str(json).unwrap();
+        assert!(resp.user.is_none());
+    }
+
+    #[test]
+    fn create_column_body_skips_none() {
+        let body = CreateColumnBody {
+            name: "Todo".into(),
+            icon: None,
+            color: None,
+            is_final: None,
+        };
+        let json = serde_json::to_string(&body).unwrap();
+        assert!(json.contains("name"));
+        assert!(!json.contains("icon"));
+        assert!(!json.contains("color"));
+        assert!(!json.contains("isFinal"));
+    }
+}

@@ -349,6 +349,15 @@ pub enum TaskCommand {
         /// Filter by priority
         #[arg(long)]
         priority: Option<String>,
+        /// Filter by assignee user ID
+        #[arg(long)]
+        assignee: Option<String>,
+        /// Page number (requires --limit)
+        #[arg(long)]
+        page: Option<u32>,
+        /// Max tasks per page (1-100)
+        #[arg(long)]
+        limit: Option<u32>,
     },
     /// Get task details
     Get {
@@ -537,6 +546,19 @@ pub enum LabelCommand {
         #[arg(long)]
         task_id: Option<String>,
     },
+    /// Attach a label to a task
+    Attach {
+        /// Label ID
+        id: String,
+        /// Task ID to attach the label to
+        #[arg(long)]
+        task: String,
+    },
+    /// Detach a label from its current task
+    Detach {
+        /// Label ID
+        id: String,
+    },
     /// Update a label
     Update {
         /// Label ID
@@ -684,4 +706,295 @@ pub struct SearchArgs {
     /// Filter by project ID
     #[arg(long)]
     pub project_id: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    fn parse(args: &[&str]) -> Cli {
+        Cli::try_parse_from(args).unwrap()
+    }
+
+    // --- Command aliases ---
+
+    #[test]
+    fn task_alias_t() {
+        let cli = parse(&["kaneo", "t", "ls"]);
+        assert!(matches!(cli.command, Command::Task(_)));
+    }
+
+    #[test]
+    fn project_alias_proj() {
+        let cli = parse(&["kaneo", "proj", "ls"]);
+        assert!(matches!(cli.command, Command::Project(_)));
+    }
+
+    #[test]
+    fn workspace_alias_ws() {
+        let cli = parse(&["kaneo", "ws", "ls"]);
+        assert!(matches!(cli.command, Command::Workspace(_)));
+    }
+
+    #[test]
+    fn column_alias_col() {
+        let cli = parse(&["kaneo", "col", "ls"]);
+        assert!(matches!(cli.command, Command::Column(_)));
+    }
+
+    #[test]
+    fn notification_alias_notif() {
+        let cli = parse(&["kaneo", "notif", "ls"]);
+        assert!(matches!(cli.command, Command::Notification(_)));
+    }
+
+    // --- Global flags ---
+
+    #[test]
+    fn global_json_flag() {
+        let cli = parse(&["kaneo", "--json", "context"]);
+        assert!(cli.json);
+    }
+
+    #[test]
+    fn global_human_flag() {
+        let cli = parse(&["kaneo", "--human", "context"]);
+        assert!(cli.human);
+    }
+
+    #[test]
+    fn global_workspace_short() {
+        let cli = parse(&["kaneo", "-w", "ws-123", "context"]);
+        assert_eq!(cli.workspace.as_deref(), Some("ws-123"));
+    }
+
+    #[test]
+    fn global_project_short() {
+        let cli = parse(&["kaneo", "-p", "proj-456", "context"]);
+        assert_eq!(cli.project.as_deref(), Some("proj-456"));
+    }
+
+    #[test]
+    fn global_token() {
+        let cli = parse(&["kaneo", "--token", "my-key", "context"]);
+        assert_eq!(cli.token.as_deref(), Some("my-key"));
+    }
+
+    // --- Task commands ---
+
+    #[test]
+    fn task_create_with_flags() {
+        let cli = parse(&[
+            "kaneo",
+            "t",
+            "create",
+            "Fix bug",
+            "--priority",
+            "high",
+            "--status",
+            "todo",
+            "--description",
+            "Something broken",
+        ]);
+        if let Command::Task(args) = cli.command {
+            if let TaskCommand::Create {
+                title,
+                priority,
+                status,
+                description,
+                ..
+            } = args.command
+            {
+                assert_eq!(title, "Fix bug");
+                assert_eq!(priority, "high");
+                assert_eq!(status, "todo");
+                assert_eq!(description, "Something broken");
+            } else {
+                panic!("expected Create");
+            }
+        } else {
+            panic!("expected Task");
+        }
+    }
+
+    #[test]
+    fn task_create_defaults() {
+        let cli = parse(&["kaneo", "t", "create", "New task"]);
+        if let Command::Task(args) = cli.command {
+            if let TaskCommand::Create {
+                priority,
+                status,
+                description,
+                ..
+            } = args.command
+            {
+                assert_eq!(priority, "no-priority");
+                assert_eq!(status, "backlog");
+                assert_eq!(description, "");
+            } else {
+                panic!("expected Create");
+            }
+        } else {
+            panic!("expected Task");
+        }
+    }
+
+    #[test]
+    fn task_list_with_filters() {
+        let cli = parse(&[
+            "kaneo",
+            "t",
+            "ls",
+            "--status",
+            "todo",
+            "--priority",
+            "high",
+            "--assignee",
+            "user-1",
+            "--limit",
+            "10",
+            "--page",
+            "2",
+        ]);
+        if let Command::Task(args) = cli.command {
+            if let TaskCommand::List {
+                status,
+                priority,
+                assignee,
+                limit,
+                page,
+                ..
+            } = args.command
+            {
+                assert_eq!(status.as_deref(), Some("todo"));
+                assert_eq!(priority.as_deref(), Some("high"));
+                assert_eq!(assignee.as_deref(), Some("user-1"));
+                assert_eq!(limit, Some(10));
+                assert_eq!(page, Some(2));
+            } else {
+                panic!("expected List");
+            }
+        } else {
+            panic!("expected Task");
+        }
+    }
+
+    #[test]
+    fn task_list_with_project_id() {
+        let cli = parse(&["kaneo", "t", "ls", "proj-abc"]);
+        if let Command::Task(args) = cli.command {
+            if let TaskCommand::List { project_id, .. } = args.command {
+                assert_eq!(project_id.as_deref(), Some("proj-abc"));
+            } else {
+                panic!("expected List");
+            }
+        } else {
+            panic!("expected Task");
+        }
+    }
+
+    #[test]
+    fn task_status_interactive() {
+        let cli = parse(&["kaneo", "t", "status", "task-id"]);
+        if let Command::Task(args) = cli.command {
+            if let TaskCommand::Status { id, status } = args.command {
+                assert_eq!(id, "task-id");
+                assert!(status.is_none());
+            } else {
+                panic!("expected Status");
+            }
+        } else {
+            panic!("expected Task");
+        }
+    }
+
+    #[test]
+    fn task_status_explicit() {
+        let cli = parse(&["kaneo", "t", "status", "task-id", "done"]);
+        if let Command::Task(args) = cli.command {
+            if let TaskCommand::Status { status, .. } = args.command {
+                assert_eq!(status.as_deref(), Some("done"));
+            } else {
+                panic!("expected Status");
+            }
+        } else {
+            panic!("expected Task");
+        }
+    }
+
+    #[test]
+    fn task_delete_alias_rm() {
+        let cli = parse(&["kaneo", "t", "rm", "task-id"]);
+        if let Command::Task(args) = cli.command {
+            assert!(matches!(args.command, TaskCommand::Delete { .. }));
+        } else {
+            panic!("expected Task");
+        }
+    }
+
+    // --- Label commands ---
+
+    #[test]
+    fn label_attach() {
+        let cli = parse(&["kaneo", "label", "attach", "label-1", "--task", "task-1"]);
+        if let Command::Label(args) = cli.command {
+            if let LabelCommand::Attach { id, task } = args.command {
+                assert_eq!(id, "label-1");
+                assert_eq!(task, "task-1");
+            } else {
+                panic!("expected Attach");
+            }
+        } else {
+            panic!("expected Label");
+        }
+    }
+
+    #[test]
+    fn label_detach() {
+        let cli = parse(&["kaneo", "label", "detach", "label-1"]);
+        if let Command::Label(args) = cli.command {
+            assert!(matches!(args.command, LabelCommand::Detach { .. }));
+        } else {
+            panic!("expected Label");
+        }
+    }
+
+    // --- Link ---
+
+    #[test]
+    fn link_with_flags() {
+        let cli = parse(&["kaneo", "link", "-w", "ws-1", "-p", "proj-1"]);
+        if let Command::Link(args) = cli.command {
+            assert_eq!(args.workspace.as_deref(), Some("ws-1"));
+            assert_eq!(args.project.as_deref(), Some("proj-1"));
+        } else {
+            panic!("expected Link");
+        }
+    }
+
+    #[test]
+    fn link_no_flags() {
+        let cli = parse(&["kaneo", "link"]);
+        if let Command::Link(args) = cli.command {
+            assert!(args.workspace.is_none());
+            assert!(args.project.is_none());
+        } else {
+            panic!("expected Link");
+        }
+    }
+
+    // --- Search ---
+
+    #[test]
+    fn search_defaults() {
+        let cli = parse(&["kaneo", "search", "login bug"]);
+        if let Command::Search(args) = cli.command {
+            assert_eq!(args.query, "login bug");
+            assert_eq!(args.r#type, "all");
+            assert_eq!(args.limit, "20");
+        } else {
+            panic!("expected Search");
+        }
+    }
 }

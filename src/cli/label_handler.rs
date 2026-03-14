@@ -67,7 +67,37 @@ pub async fn run(args: LabelArgs, ctx: &ResolvedContext, json: bool) -> anyhow::
             if json {
                 output::json_output(&label);
             } else {
-                output::success(false, &format!("Created label '{}'", label.name));
+                output::success(
+                    false,
+                    &format!("Created label '{}' ({})", label.name, label.id),
+                );
+            }
+        }
+
+        LabelCommand::Attach { id, task } => {
+            #[derive(Serialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Body {
+                task_id: String,
+            }
+            let label: Label = client
+                .put(&format!("/label/{id}/task"), &Body { task_id: task })
+                .await?;
+
+            if json {
+                output::json_output(&label);
+            } else {
+                output::success(false, &format!("Attached label '{}' to task", label.name));
+            }
+        }
+
+        LabelCommand::Detach { id } => {
+            let label: Label = client.delete(&format!("/label/{id}/task")).await?;
+
+            if json {
+                output::json_output(&label);
+            } else {
+                output::success(false, &format!("Detached label '{}' from task", label.name));
             }
         }
 
@@ -89,13 +119,12 @@ pub async fn run(args: LabelArgs, ctx: &ResolvedContext, json: bool) -> anyhow::
         }
 
         LabelCommand::Delete { id } => {
-            let result: serde_json::Value = client.delete(&format!("/label/{id}")).await?;
+            let label: Label = client.delete(&format!("/label/{id}")).await?;
 
             if json {
-                output::json_output(&result);
+                output::json_output(&label);
             } else {
-                let name = result.get("name").and_then(|v| v.as_str()).unwrap_or(&id);
-                output::success(false, &format!("Deleted label '{name}'"));
+                output::success(false, &format!("Deleted label '{}'", label.name));
             }
         }
     }

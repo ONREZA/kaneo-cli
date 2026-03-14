@@ -37,6 +37,7 @@ pub const PROJECT_DELETE: (&str, &str) = ("DELETE", "/project/{id}");
 pub const TASK_LIST: (&str, &str) = ("GET", "/task/tasks/{projectId}");
 pub const TASK_GET: (&str, &str) = ("GET", "/task/{id}");
 pub const TASK_CREATE: (&str, &str) = ("POST", "/task/{projectId}");
+pub const TASK_UPDATE: (&str, &str) = ("PUT", "/task/{id}");
 pub const TASK_DELETE: (&str, &str) = ("DELETE", "/task/{id}");
 pub const TASK_UPDATE_STATUS: (&str, &str) = ("PUT", "/task/status/{id}");
 pub const TASK_UPDATE_PRIORITY: (&str, &str) = ("PUT", "/task/priority/{id}");
@@ -62,6 +63,8 @@ pub const LABEL_LIST_TASK: (&str, &str) = ("GET", "/label/task/{taskId}");
 pub const LABEL_CREATE: (&str, &str) = ("POST", "/label");
 pub const LABEL_UPDATE: (&str, &str) = ("PUT", "/label/{id}");
 pub const LABEL_DELETE: (&str, &str) = ("DELETE", "/label/{id}");
+pub const LABEL_ATTACH: (&str, &str) = ("PUT", "/label/{id}/task");
+pub const LABEL_DETACH: (&str, &str) = ("DELETE", "/label/{id}/task");
 
 // --- Activity ---
 pub const ACTIVITY_LIST: (&str, &str) = ("GET", "/activity/{taskId}");
@@ -90,12 +93,11 @@ pub const ASSET_GET: (&str, &str) = ("GET", "/asset/{id}");
 // --- OpenAPI ---
 pub const OPENAPI: (&str, &str) = ("GET", "/openapi");
 
-/// Routes that are NOT part of the Kaneo OpenAPI spec (better-auth internals, etc.)
-/// but are used by the CLI. Excluded from automated validation.
-pub const EXTERNAL_ROUTES: &[(&str, &str)] = &[AUTH_GET_SESSION, ASSET_GET];
-
 /// All Kaneo API routes used by the CLI, validated against the OpenAPI spec.
+///
+/// Duplicates in this list will cause test failures.
 pub const ALL_ROUTES: &[(&str, &str)] = &[
+    AUTH_GET_SESSION,
     ORG_LIST,
     ORG_GET_FULL,
     ORG_CREATE,
@@ -119,6 +121,7 @@ pub const ALL_ROUTES: &[(&str, &str)] = &[
     TASK_LIST,
     TASK_GET,
     TASK_CREATE,
+    TASK_UPDATE,
     TASK_DELETE,
     TASK_UPDATE_STATUS,
     TASK_UPDATE_PRIORITY,
@@ -140,6 +143,8 @@ pub const ALL_ROUTES: &[(&str, &str)] = &[
     LABEL_CREATE,
     LABEL_UPDATE,
     LABEL_DELETE,
+    LABEL_ATTACH,
+    LABEL_DETACH,
     ACTIVITY_LIST,
     ACTIVITY_CREATE_COMMENT,
     ACTIVITY_UPDATE_COMMENT,
@@ -153,4 +158,62 @@ pub const ALL_ROUTES: &[(&str, &str)] = &[
     TIME_ENTRY_CREATE,
     TIME_ENTRY_UPDATE,
     SEARCH,
+    ASSET_GET,
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn no_duplicate_routes() {
+        let mut seen = HashSet::new();
+        for (method, path) in ALL_ROUTES {
+            let key = format!("{method} {path}");
+            assert!(seen.insert(key.clone()), "duplicate route: {key}");
+        }
+    }
+
+    #[test]
+    fn all_routes_have_valid_methods() {
+        let valid = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+        for (method, path) in ALL_ROUTES {
+            assert!(
+                valid.contains(method),
+                "invalid HTTP method '{method}' for {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn all_paths_start_with_slash() {
+        for (method, path) in ALL_ROUTES {
+            assert!(
+                path.starts_with('/'),
+                "{method} {path} — path must start with '/'"
+            );
+        }
+    }
+
+    #[test]
+    fn route_count_sanity() {
+        // Guard against accidentally emptying the list
+        assert!(
+            ALL_ROUTES.len() >= 50,
+            "expected at least 50 routes, got {}",
+            ALL_ROUTES.len()
+        );
+    }
+
+    #[test]
+    fn path_params_use_braces() {
+        for (method, path) in ALL_ROUTES {
+            // No colons (Express-style :id), only {id}
+            assert!(
+                !path.contains(':'),
+                "{method} {path} — use {{param}} not :param"
+            );
+        }
+    }
+}

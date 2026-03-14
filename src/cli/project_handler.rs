@@ -108,13 +108,12 @@ pub async fn run(args: ProjectArgs, ctx: &ResolvedContext, json: bool) -> anyhow
         }
 
         ProjectCommand::Delete { id } => {
-            let result: serde_json::Value = client.delete(&format!("/project/{id}")).await?;
+            let project: Project = client.delete(&format!("/project/{id}")).await?;
 
             if json {
-                output::json_output(&result);
+                output::json_output(&project);
             } else {
-                let name = result.get("name").and_then(|v| v.as_str()).unwrap_or(&id);
-                output::success(false, &format!("Deleted project '{name}'"));
+                output::success(false, &format!("Deleted project '{}'", project.name));
             }
         }
     }
@@ -129,4 +128,56 @@ fn slug_from_name(name: &str) -> String {
         .collect::<String>()
         .trim_matches('-')
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slug_simple() {
+        assert_eq!(slug_from_name("My Project"), "my-project");
+    }
+
+    #[test]
+    fn slug_already_lowercase() {
+        assert_eq!(slug_from_name("hello"), "hello");
+    }
+
+    #[test]
+    fn slug_special_chars() {
+        assert_eq!(slug_from_name("Hello World!"), "hello-world");
+        assert_eq!(slug_from_name("!Hello!"), "hello");
+    }
+
+    #[test]
+    fn slug_numbers() {
+        assert_eq!(slug_from_name("Project 42"), "project-42");
+    }
+
+    #[test]
+    fn slug_mixed_case() {
+        assert_eq!(slug_from_name("CamelCase"), "camelcase");
+    }
+
+    #[test]
+    fn slug_multiple_spaces() {
+        assert_eq!(slug_from_name("a  b   c"), "a--b---c");
+    }
+
+    #[test]
+    fn slug_empty() {
+        assert_eq!(slug_from_name(""), "");
+    }
+
+    #[test]
+    fn slug_only_special() {
+        assert_eq!(slug_from_name("---"), "");
+    }
+
+    #[test]
+    fn slug_unicode() {
+        // Cyrillic is alphanumeric
+        assert_eq!(slug_from_name("Проект Один"), "проект-один");
+    }
 }

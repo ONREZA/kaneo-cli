@@ -39,6 +39,8 @@ const EXPECTED_OPERATIONS: &[(&str, &str)] = &[
     ("getLabel", "label get"),
     ("updateLabel", "label update"),
     ("deleteLabel", "label delete"),
+    ("attachLabelToTask", "label attach"),
+    ("detachLabelFromTask", "label detach"),
     // Activity
     ("getActivities", "activity ls"),
     ("createComment", "activity comment"),
@@ -65,6 +67,9 @@ const EXPECTED_OPERATIONS: &[(&str, &str)] = &[
     ("getWorkflowRules", "workflow-rule ls"),
     ("upsertWorkflowRule", "workflow-rule upsert"),
     ("deleteWorkflowRule", "workflow-rule delete"),
+    // Auth / Assets
+    ("getSession", "whoami / internal"),
+    ("getAsset", "task asset"),
     // Organization (workspace) CRUD
     ("createOrganization", "workspace create"),
     ("updateOrganization", "workspace update"),
