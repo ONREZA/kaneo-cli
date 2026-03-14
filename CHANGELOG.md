@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-03-14
+
+### ✨ Features
+
+- **cli:** adapt to Kaneo v2.3.11, add label attach/detach, server-side filtering, unit tests ([7937429](https://github.com/ONREZA/kaneo-cli/commit/7937429bebbc40617ac91c164a029455d7a6caa6))
+
 ## [0.4.1] - 2026-03-13
 
 ### 🐛 Bug Fixes
