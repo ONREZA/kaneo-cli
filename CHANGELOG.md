@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-03-20
+
+### ✨ Features
+
+- **cli:** resolve human-readable task refs like DEP-65 ([af31105](https://github.com/ONREZA/kaneo-cli/commit/af31105ca08ac95056d13b88bdc316102017826e))
+
 ## [0.5.0] - 2026-03-14
 
 ### ✨ Features
