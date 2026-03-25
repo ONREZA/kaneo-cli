@@ -8,10 +8,13 @@ pub async fn run(args: ProjectArgs, ctx: &ResolvedContext, json: bool) -> anyhow
     let client = ApiClient::new(&ctx.api_url, &ctx.api_key)?;
 
     match args.command {
-        ProjectCommand::List => {
+        ProjectCommand::List { include_archived } => {
             let ws = auth::require_workspace(ctx)?;
-            let projects: Vec<Project> =
-                client.get_query("/project", &[("workspaceId", ws)]).await?;
+            let mut query: Vec<(&str, String)> = vec![("workspaceId", ws.to_string())];
+            if include_archived {
+                query.push(("includeArchived", "true".into()));
+            }
+            let projects: Vec<Project> = client.get_query("/project", &query).await?;
 
             if json {
                 output::json_output(&projects);
@@ -24,10 +27,16 @@ pub async fn run(args: ProjectArgs, ctx: &ResolvedContext, json: bool) -> anyhow
                 let dim = console::Style::new().dim();
                 for p in &projects {
                     let icon = p.icon.as_deref().unwrap_or("📋");
+                    let archived = if p.archived_at.is_some() {
+                        " (archived)"
+                    } else {
+                        ""
+                    };
                     eprintln!(
-                        "  {icon} {} {}",
+                        "  {icon} {} {}{}",
                         bold.apply_to(&p.name),
                         dim.apply_to(&p.id),
+                        dim.apply_to(archived),
                     );
                     if let Some(desc) = &p.description
                         && !desc.is_empty()
@@ -57,6 +66,9 @@ pub async fn run(args: ProjectArgs, ctx: &ResolvedContext, json: bool) -> anyhow
                 }
                 let public = project.is_public.unwrap_or(false);
                 eprintln!("  {} {public}", dim.apply_to("public:"));
+                if let Some(archived) = &project.archived_at {
+                    eprintln!("  {} {archived}", dim.apply_to("archived:"));
+                }
             }
         }
 
@@ -114,6 +126,30 @@ pub async fn run(args: ProjectArgs, ctx: &ResolvedContext, json: bool) -> anyhow
                 output::json_output(&project);
             } else {
                 output::success(false, &format!("Deleted project '{}'", project.name));
+            }
+        }
+
+        ProjectCommand::Archive { id } => {
+            let project: Project = client
+                .put(&format!("/project/{id}/archive"), &serde_json::json!({}))
+                .await?;
+
+            if json {
+                output::json_output(&project);
+            } else {
+                output::success(false, &format!("Archived project '{}'", project.name));
+            }
+        }
+
+        ProjectCommand::Unarchive { id } => {
+            let project: Project = client
+                .put(&format!("/project/{id}/unarchive"), &serde_json::json!({}))
+                .await?;
+
+            if json {
+                output::json_output(&project);
+            } else {
+                output::success(false, &format!("Unarchived project '{}'", project.name));
             }
         }
     }

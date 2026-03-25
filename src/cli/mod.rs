@@ -1,6 +1,8 @@
 pub mod activity_handler;
 pub mod api_check_handler;
 pub mod column_handler;
+pub mod external_link_handler;
+pub mod invitation_handler;
 pub mod label_handler;
 pub mod link_handler;
 pub mod login_handler;
@@ -93,6 +95,14 @@ pub enum Command {
     /// Track time on tasks
     #[command(alias = "time")]
     TimeEntry(TimeEntryArgs),
+
+    /// View external links on tasks
+    #[command(alias = "ext-link")]
+    ExternalLink(ExternalLinkArgs),
+
+    /// View invitations
+    #[command(alias = "inv")]
+    Invitation(InvitationArgs),
 
     /// Search across tasks, projects, comments
     Search(SearchArgs),
@@ -288,7 +298,11 @@ pub struct ProjectArgs {
 pub enum ProjectCommand {
     /// List projects in workspace
     #[command(alias = "ls")]
-    List,
+    List {
+        /// Include archived projects
+        #[arg(long)]
+        include_archived: bool,
+    },
     /// Get project details
     Get {
         /// Project ID
@@ -326,9 +340,57 @@ pub enum ProjectCommand {
         /// Project ID
         id: String,
     },
+    /// Archive a project
+    Archive {
+        /// Project ID
+        id: String,
+    },
+    /// Unarchive a project
+    Unarchive {
+        /// Project ID
+        id: String,
+    },
 }
 
 // --- Task ---
+
+#[derive(Debug, Clone, clap::ValueEnum)]
+pub enum TaskSortBy {
+    CreatedAt,
+    Priority,
+    DueDate,
+    Position,
+    Title,
+    Number,
+}
+
+impl TaskSortBy {
+    pub fn as_api_str(&self) -> &'static str {
+        match self {
+            Self::CreatedAt => "createdAt",
+            Self::Priority => "priority",
+            Self::DueDate => "dueDate",
+            Self::Position => "position",
+            Self::Title => "title",
+            Self::Number => "number",
+        }
+    }
+}
+
+#[derive(Debug, Clone, clap::ValueEnum)]
+pub enum SortOrder {
+    Asc,
+    Desc,
+}
+
+impl SortOrder {
+    pub fn as_api_str(&self) -> &'static str {
+        match self {
+            Self::Asc => "asc",
+            Self::Desc => "desc",
+        }
+    }
+}
 
 #[derive(Parser)]
 pub struct TaskArgs {
@@ -358,6 +420,18 @@ pub enum TaskCommand {
         /// Max tasks per page (1-100)
         #[arg(long)]
         limit: Option<u32>,
+        /// Sort by field
+        #[arg(long)]
+        sort_by: Option<TaskSortBy>,
+        /// Sort order
+        #[arg(long)]
+        sort_order: Option<SortOrder>,
+        /// Filter tasks due before this date (ISO format)
+        #[arg(long)]
+        due_before: Option<String>,
+        /// Filter tasks due after this date (ISO format)
+        #[arg(long)]
+        due_after: Option<String>,
     },
     /// Get task details
     Get {
@@ -530,6 +604,11 @@ pub enum LabelCommand {
     /// List labels in workspace
     #[command(alias = "ls")]
     List,
+    /// Get label details
+    Get {
+        /// Label ID
+        id: String,
+    },
     /// List labels for a task
     Task {
         /// Task ID
@@ -637,6 +716,24 @@ pub enum NotificationCommand {
     ReadAll,
     /// Clear all notifications
     ClearAll,
+    /// Create a notification
+    Create {
+        /// Target user ID
+        user_id: String,
+        /// Notification title
+        title: String,
+        /// Notification message
+        message: String,
+        /// Type: info, task_created, workspace_created, etc.
+        #[arg(long, default_value = "info")]
+        notification_type: String,
+        /// Related entity ID
+        #[arg(long)]
+        related_entity_id: Option<String>,
+        /// Related entity type (task, workspace)
+        #[arg(long)]
+        related_entity_type: Option<String>,
+    },
 }
 
 // --- Time Entry ---
@@ -685,6 +782,43 @@ pub enum TimeEntryCommand {
         /// Description
         #[arg(long)]
         description: Option<String>,
+    },
+}
+
+// --- External Link ---
+
+#[derive(Parser)]
+pub struct ExternalLinkArgs {
+    #[command(subcommand)]
+    pub command: ExternalLinkCommand,
+}
+
+#[derive(Subcommand)]
+pub enum ExternalLinkCommand {
+    /// List external links for a task
+    #[command(alias = "ls")]
+    Task {
+        /// Task ID
+        task_id: String,
+    },
+}
+
+// --- Invitation ---
+
+#[derive(Parser)]
+pub struct InvitationArgs {
+    #[command(subcommand)]
+    pub command: InvitationCommand,
+}
+
+#[derive(Subcommand)]
+pub enum InvitationCommand {
+    /// List your pending invitations
+    Pending,
+    /// Get invitation details
+    Get {
+        /// Invitation ID
+        id: String,
     },
 }
 
@@ -996,5 +1130,232 @@ mod tests {
         } else {
             panic!("expected Search");
         }
+    }
+
+    // --- New command tests ---
+
+    #[test]
+    fn project_list_include_archived() {
+        let cli = parse(&["kaneo", "proj", "ls", "--include-archived"]);
+        if let Command::Project(args) = cli.command {
+            if let ProjectCommand::List { include_archived } = args.command {
+                assert!(include_archived);
+            } else {
+                panic!("expected List");
+            }
+        } else {
+            panic!("expected Project");
+        }
+    }
+
+    #[test]
+    fn project_list_default_no_archived() {
+        let cli = parse(&["kaneo", "proj", "ls"]);
+        if let Command::Project(args) = cli.command {
+            if let ProjectCommand::List { include_archived } = args.command {
+                assert!(!include_archived);
+            } else {
+                panic!("expected List");
+            }
+        } else {
+            panic!("expected Project");
+        }
+    }
+
+    #[test]
+    fn project_archive() {
+        let cli = parse(&["kaneo", "proj", "archive", "proj-1"]);
+        if let Command::Project(args) = cli.command {
+            if let ProjectCommand::Archive { id } = args.command {
+                assert_eq!(id, "proj-1");
+            } else {
+                panic!("expected Archive");
+            }
+        } else {
+            panic!("expected Project");
+        }
+    }
+
+    #[test]
+    fn project_unarchive() {
+        let cli = parse(&["kaneo", "proj", "unarchive", "proj-1"]);
+        if let Command::Project(args) = cli.command {
+            if let ProjectCommand::Unarchive { id } = args.command {
+                assert_eq!(id, "proj-1");
+            } else {
+                panic!("expected Unarchive");
+            }
+        } else {
+            panic!("expected Project");
+        }
+    }
+
+    #[test]
+    fn task_list_with_sort() {
+        let cli = parse(&[
+            "kaneo",
+            "t",
+            "ls",
+            "--sort-by",
+            "priority",
+            "--sort-order",
+            "desc",
+        ]);
+        if let Command::Task(args) = cli.command {
+            if let TaskCommand::List {
+                sort_by,
+                sort_order,
+                ..
+            } = args.command
+            {
+                assert!(matches!(sort_by, Some(TaskSortBy::Priority)));
+                assert!(matches!(sort_order, Some(SortOrder::Desc)));
+            } else {
+                panic!("expected List");
+            }
+        } else {
+            panic!("expected Task");
+        }
+    }
+
+    #[test]
+    fn task_list_with_due_filters() {
+        let cli = parse(&[
+            "kaneo",
+            "t",
+            "ls",
+            "--due-before",
+            "2026-04-01",
+            "--due-after",
+            "2026-03-01",
+        ]);
+        if let Command::Task(args) = cli.command {
+            if let TaskCommand::List {
+                due_before,
+                due_after,
+                ..
+            } = args.command
+            {
+                assert_eq!(due_before.as_deref(), Some("2026-04-01"));
+                assert_eq!(due_after.as_deref(), Some("2026-03-01"));
+            } else {
+                panic!("expected List");
+            }
+        } else {
+            panic!("expected Task");
+        }
+    }
+
+    #[test]
+    fn label_get() {
+        let cli = parse(&["kaneo", "label", "get", "label-1"]);
+        if let Command::Label(args) = cli.command {
+            if let LabelCommand::Get { id } = args.command {
+                assert_eq!(id, "label-1");
+            } else {
+                panic!("expected Get");
+            }
+        } else {
+            panic!("expected Label");
+        }
+    }
+
+    #[test]
+    fn external_link_alias() {
+        let cli = parse(&["kaneo", "ext-link", "ls", "task-1"]);
+        assert!(matches!(cli.command, Command::ExternalLink(_)));
+    }
+
+    #[test]
+    fn external_link_task() {
+        let cli = parse(&["kaneo", "external-link", "task", "task-1"]);
+        if let Command::ExternalLink(args) = cli.command {
+            if let ExternalLinkCommand::Task { task_id } = args.command {
+                assert_eq!(task_id, "task-1");
+            } else {
+                panic!("expected Task");
+            }
+        } else {
+            panic!("expected ExternalLink");
+        }
+    }
+
+    #[test]
+    fn invitation_alias() {
+        let cli = parse(&["kaneo", "inv", "pending"]);
+        assert!(matches!(cli.command, Command::Invitation(_)));
+    }
+
+    #[test]
+    fn invitation_pending() {
+        let cli = parse(&["kaneo", "invitation", "pending"]);
+        if let Command::Invitation(args) = cli.command {
+            assert!(matches!(args.command, InvitationCommand::Pending));
+        } else {
+            panic!("expected Invitation");
+        }
+    }
+
+    #[test]
+    fn invitation_get() {
+        let cli = parse(&["kaneo", "invitation", "get", "inv-1"]);
+        if let Command::Invitation(args) = cli.command {
+            if let InvitationCommand::Get { id } = args.command {
+                assert_eq!(id, "inv-1");
+            } else {
+                panic!("expected Get");
+            }
+        } else {
+            panic!("expected Invitation");
+        }
+    }
+
+    #[test]
+    fn notification_create() {
+        let cli = parse(&[
+            "kaneo",
+            "notif",
+            "create",
+            "user-1",
+            "Title",
+            "Message body",
+            "--notification-type",
+            "info",
+        ]);
+        if let Command::Notification(args) = cli.command {
+            if let NotificationCommand::Create {
+                user_id,
+                title,
+                message,
+                notification_type,
+                ..
+            } = args.command
+            {
+                assert_eq!(user_id, "user-1");
+                assert_eq!(title, "Title");
+                assert_eq!(message, "Message body");
+                assert_eq!(notification_type, "info");
+            } else {
+                panic!("expected Create");
+            }
+        } else {
+            panic!("expected Notification");
+        }
+    }
+
+    #[test]
+    fn sort_by_api_str() {
+        assert_eq!(TaskSortBy::CreatedAt.as_api_str(), "createdAt");
+        assert_eq!(TaskSortBy::DueDate.as_api_str(), "dueDate");
+        assert_eq!(TaskSortBy::Priority.as_api_str(), "priority");
+        assert_eq!(TaskSortBy::Position.as_api_str(), "position");
+        assert_eq!(TaskSortBy::Title.as_api_str(), "title");
+        assert_eq!(TaskSortBy::Number.as_api_str(), "number");
+    }
+
+    #[test]
+    fn sort_order_api_str() {
+        assert_eq!(SortOrder::Asc.as_api_str(), "asc");
+        assert_eq!(SortOrder::Desc.as_api_str(), "desc");
     }
 }

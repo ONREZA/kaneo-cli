@@ -13,6 +13,8 @@ pub struct Project {
     pub description: Option<String>,
     pub created_at: String,
     pub is_public: Option<bool>,
+    #[serde(default)]
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -141,6 +143,14 @@ pub struct Activity {
     pub created_at: String,
     pub user_id: Option<String>,
     pub content: Option<String>,
+    #[serde(default)]
+    pub external_user_name: Option<String>,
+    #[serde(default)]
+    pub external_user_avatar: Option<String>,
+    #[serde(default)]
+    pub external_source: Option<String>,
+    #[serde(default)]
+    pub external_url: Option<String>,
 }
 
 // --- Notification ---
@@ -254,6 +264,122 @@ pub struct ServerConfig {
     pub has_github_sign_in: Option<bool>,
     pub has_google_sign_in: Option<bool>,
     pub has_discord_sign_in: Option<bool>,
+    #[serde(default)]
+    pub disable_password_registration: Option<bool>,
+    #[serde(default, rename = "hasCustomOAuth")]
+    pub has_custom_oauth: Option<bool>,
+    #[serde(default)]
+    pub has_guest_access: Option<bool>,
+}
+
+// --- Comment (first-class) ---
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Comment {
+    pub id: String,
+    pub task_id: String,
+    pub user_id: String,
+    pub content: String,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub user: Option<CommentUser>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommentUser {
+    pub name: String,
+    #[serde(default)]
+    pub image: Option<String>,
+}
+
+// --- Task Relation ---
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskRelation {
+    pub id: String,
+    pub source_task_id: String,
+    pub target_task_id: String,
+    pub relation_type: String,
+    pub created_at: String,
+}
+
+// --- External Link ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalLink {
+    pub id: String,
+    pub task_id: String,
+    pub integration_id: String,
+    pub resource_type: String,
+    pub external_id: String,
+    pub url: String,
+    pub title: Option<String>,
+    pub metadata: Option<serde_json::Value>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+// --- Invitation ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Invitation {
+    pub id: String,
+    pub email: String,
+    pub workspace_id: String,
+    pub workspace_name: String,
+    pub inviter_name: String,
+    pub expires_at: String,
+    pub created_at: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InvitationDetails {
+    pub valid: bool,
+    pub invitation: Option<InvitationInfo>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvitationInfo {
+    pub id: String,
+    pub email: String,
+    pub workspace_name: String,
+    pub inviter_name: String,
+    pub expires_at: String,
+    pub status: String,
+    pub expired: bool,
+}
+
+// --- Workspace Member (dedicated endpoint) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceMemberInfo {
+    pub id: String,
+    pub name: String,
+    pub email: String,
+    #[serde(default)]
+    pub image: Option<String>,
+    pub role: String,
+}
+
+// --- Bulk Update ---
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkUpdateResult {
+    pub success: bool,
+    pub updated_count: i64,
 }
 
 #[cfg(test)]
@@ -413,5 +539,181 @@ mod tests {
         assert!(!json.contains("icon"));
         assert!(!json.contains("color"));
         assert!(!json.contains("isFinal"));
+    }
+
+    #[test]
+    fn project_deserialize_with_archived() {
+        let json = r#"{
+            "id": "p1",
+            "workspaceId": "ws1",
+            "slug": "archived-proj",
+            "name": "Archived",
+            "createdAt": "2026-01-01",
+            "archivedAt": "2026-03-20T12:00:00Z"
+        }"#;
+        let project: Project = serde_json::from_str(json).unwrap();
+        assert_eq!(project.archived_at.as_deref(), Some("2026-03-20T12:00:00Z"));
+    }
+
+    #[test]
+    fn project_deserialize_without_archived() {
+        let json = r#"{
+            "id": "p1",
+            "workspaceId": "ws1",
+            "slug": "active-proj",
+            "name": "Active",
+            "createdAt": "2026-01-01"
+        }"#;
+        let project: Project = serde_json::from_str(json).unwrap();
+        assert!(project.archived_at.is_none());
+    }
+
+    #[test]
+    fn activity_deserialize_with_external() {
+        let json = r#"{
+            "id": "a1",
+            "taskId": "t1",
+            "type": "comment",
+            "createdAt": "2026-01-01",
+            "externalUserName": "github-bot",
+            "externalSource": "github"
+        }"#;
+        let activity: Activity = serde_json::from_str(json).unwrap();
+        assert_eq!(activity.external_user_name.as_deref(), Some("github-bot"));
+        assert_eq!(activity.external_source.as_deref(), Some("github"));
+        assert!(activity.external_url.is_none());
+    }
+
+    #[test]
+    fn external_link_deserialize() {
+        let json = r#"{
+            "id": "el1",
+            "taskId": "t1",
+            "integrationId": "gh1",
+            "resourceType": "issue",
+            "externalId": "123",
+            "url": "https://github.com/org/repo/issues/123",
+            "title": "Fix bug",
+            "metadata": {"state": "open"},
+            "createdAt": "2026-01-01",
+            "updatedAt": "2026-01-02"
+        }"#;
+        let link: ExternalLink = serde_json::from_str(json).unwrap();
+        assert_eq!(link.resource_type, "issue");
+        assert_eq!(link.title.as_deref(), Some("Fix bug"));
+        assert!(link.metadata.is_some());
+    }
+
+    #[test]
+    fn invitation_deserialize() {
+        let json = r#"{
+            "id": "inv1",
+            "email": "test@example.com",
+            "workspaceId": "ws1",
+            "workspaceName": "My Workspace",
+            "inviterName": "Admin",
+            "expiresAt": "2026-04-01",
+            "createdAt": "2026-03-01",
+            "status": "pending"
+        }"#;
+        let inv: Invitation = serde_json::from_str(json).unwrap();
+        assert_eq!(inv.email, "test@example.com");
+        assert_eq!(inv.status, "pending");
+    }
+
+    #[test]
+    fn invitation_details_valid() {
+        let json = r#"{
+            "valid": true,
+            "invitation": {
+                "id": "inv1",
+                "email": "test@example.com",
+                "workspaceName": "WS",
+                "inviterName": "Admin",
+                "expiresAt": "2026-04-01",
+                "status": "pending",
+                "expired": false
+            }
+        }"#;
+        let details: InvitationDetails = serde_json::from_str(json).unwrap();
+        assert!(details.valid);
+        assert!(details.invitation.is_some());
+        assert!(!details.invitation.unwrap().expired);
+    }
+
+    #[test]
+    fn invitation_details_invalid() {
+        let json = r#"{
+            "valid": false,
+            "error": "Invitation not found"
+        }"#;
+        let details: InvitationDetails = serde_json::from_str(json).unwrap();
+        assert!(!details.valid);
+        assert_eq!(details.error.as_deref(), Some("Invitation not found"));
+    }
+
+    #[test]
+    fn workspace_member_info_deserialize() {
+        let json = r#"{
+            "id": "u1",
+            "name": "Alice",
+            "email": "alice@example.com",
+            "image": null,
+            "role": "admin"
+        }"#;
+        let member: WorkspaceMemberInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(member.name, "Alice");
+        assert_eq!(member.role, "admin");
+        assert!(member.image.is_none());
+    }
+
+    #[test]
+    fn comment_deserialize() {
+        let json = r#"{
+            "id": "c1",
+            "taskId": "t1",
+            "userId": "u1",
+            "content": "Hello",
+            "createdAt": "2026-01-01",
+            "updatedAt": "2026-01-02",
+            "user": {"name": "Alice", "image": null}
+        }"#;
+        let comment: Comment = serde_json::from_str(json).unwrap();
+        assert_eq!(comment.content, "Hello");
+        assert!(comment.user.is_some());
+        assert_eq!(comment.user.unwrap().name, "Alice");
+    }
+
+    #[test]
+    fn task_relation_deserialize() {
+        let json = r#"{
+            "id": "r1",
+            "sourceTaskId": "t1",
+            "targetTaskId": "t2",
+            "relationType": "subtask",
+            "createdAt": "2026-01-01"
+        }"#;
+        let rel: TaskRelation = serde_json::from_str(json).unwrap();
+        assert_eq!(rel.relation_type, "subtask");
+        assert_eq!(rel.source_task_id, "t1");
+    }
+
+    #[test]
+    fn server_config_new_fields() {
+        let json = r#"{
+            "disableRegistration": false,
+            "disablePasswordRegistration": true,
+            "isDemoMode": false,
+            "hasSmtp": true,
+            "hasGithubSignIn": false,
+            "hasGoogleSignIn": false,
+            "hasDiscordSignIn": false,
+            "hasCustomOAuth": true,
+            "hasGuestAccess": false
+        }"#;
+        let config: ServerConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.disable_password_registration, Some(true));
+        assert_eq!(config.has_custom_oauth, Some(true));
+        assert_eq!(config.has_guest_access, Some(false));
     }
 }

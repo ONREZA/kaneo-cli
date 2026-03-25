@@ -149,6 +149,14 @@ async fn run(cli: Cli, json: bool) -> anyhow::Result<()> {
             let ctx = auth::resolve_context(token, api_url, workspace, project)?;
             cli::time_entry_handler::run(args, &ctx, json).await?;
         }
+        Command::ExternalLink(args) => {
+            let ctx = auth::resolve_context(token, api_url, workspace, project)?;
+            cli::external_link_handler::run(args, &ctx, json).await?;
+        }
+        Command::Invitation(args) => {
+            let ctx = auth::resolve_context(token, api_url, workspace, project)?;
+            cli::invitation_handler::run(args, &ctx, json).await?;
+        }
         Command::Search(args) => {
             let ctx = auth::resolve_context(token, api_url, workspace, project)?;
             cli::search_handler::run(args, &ctx, json).await?;

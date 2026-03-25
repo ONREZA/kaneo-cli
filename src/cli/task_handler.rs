@@ -91,6 +91,10 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             assignee,
             page,
             limit,
+            sort_by,
+            sort_order,
+            due_before,
+            due_after,
         } => {
             let project_id = resolve_project(project_id, ctx)?;
 
@@ -109,6 +113,18 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             }
             if let Some(p) = page {
                 query.push(("page", p.to_string()));
+            }
+            if let Some(sb) = &sort_by {
+                query.push(("sortBy", sb.as_api_str().to_string()));
+            }
+            if let Some(so) = &sort_order {
+                query.push(("sortOrder", so.as_api_str().to_string()));
+            }
+            if let Some(db) = &due_before {
+                query.push(("dueBefore", db.clone()));
+            }
+            if let Some(da) = &due_after {
+                query.push(("dueAfter", da.clone()));
             }
 
             let board: serde_json::Value = client

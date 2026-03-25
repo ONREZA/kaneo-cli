@@ -3,6 +3,7 @@ use crate::api::types::Notification;
 use crate::auth::ResolvedContext;
 use crate::cli::{NotificationArgs, NotificationCommand};
 use crate::output;
+use serde::Serialize;
 
 pub async fn run(args: NotificationArgs, ctx: &ResolvedContext, json: bool) -> anyhow::Result<()> {
     let client = ApiClient::new(&ctx.api_url, &ctx.api_key)?;
@@ -71,6 +72,50 @@ pub async fn run(args: NotificationArgs, ctx: &ResolvedContext, json: bool) -> a
             } else {
                 let count = result.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
                 output::success(false, &format!("Cleared {count} notifications"));
+            }
+        }
+
+        NotificationCommand::Create {
+            user_id,
+            title,
+            message,
+            notification_type,
+            related_entity_id,
+            related_entity_type,
+        } => {
+            #[derive(Serialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Body {
+                user_id: String,
+                title: String,
+                message: String,
+                r#type: String,
+                #[serde(skip_serializing_if = "Option::is_none")]
+                related_entity_id: Option<String>,
+                #[serde(skip_serializing_if = "Option::is_none")]
+                related_entity_type: Option<String>,
+            }
+            let notification: Notification = client
+                .post(
+                    "/notification",
+                    &Body {
+                        user_id,
+                        title,
+                        message,
+                        r#type: notification_type,
+                        related_entity_id,
+                        related_entity_type,
+                    },
+                )
+                .await?;
+
+            if json {
+                output::json_output(&notification);
+            } else {
+                output::success(
+                    false,
+                    &format!("Created notification '{}'", notification.title),
+                );
             }
         }
     }

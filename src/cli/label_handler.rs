@@ -33,6 +33,26 @@ pub async fn run(args: LabelArgs, ctx: &ResolvedContext, json: bool) -> anyhow::
             }
         }
 
+        LabelCommand::Get { id } => {
+            let label: Label = client.get(&format!("/label/{id}")).await?;
+
+            if json {
+                output::json_output(&label);
+            } else {
+                let bold = console::Style::new().bold();
+                let dim = console::Style::new().dim();
+                eprintln!("  ● {}", bold.apply_to(&label.name));
+                eprintln!("  {} {}", dim.apply_to("id:"), label.id);
+                eprintln!("  {} {}", dim.apply_to("color:"), label.color);
+                if let Some(ws) = &label.workspace_id {
+                    eprintln!("  {} {ws}", dim.apply_to("workspace:"));
+                }
+                if let Some(tid) = &label.task_id {
+                    eprintln!("  {} {tid}", dim.apply_to("task:"));
+                }
+            }
+        }
+
         LabelCommand::Task { task_id } => {
             let labels: Vec<Label> = client.get(&format!("/label/task/{task_id}")).await?;
 

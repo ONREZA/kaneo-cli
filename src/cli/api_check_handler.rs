@@ -10,6 +10,8 @@ const EXPECTED_OPERATIONS: &[(&str, &str)] = &[
     ("createProject", "project create"),
     ("updateProject", "project update"),
     ("deleteProject", "project delete"),
+    ("archiveProject", "project archive"),
+    ("unarchiveProject", "project unarchive"),
     // Tasks
     ("listTasks", "task ls"),
     ("getTask", "task get"),
@@ -48,6 +50,7 @@ const EXPECTED_OPERATIONS: &[(&str, &str)] = &[
     ("deleteComment", "activity delete-comment"),
     // Notifications
     ("listNotifications", "notification ls"),
+    ("createNotification", "notification create"),
     ("markNotificationAsRead", "notification read"),
     ("markAllNotificationsAsRead", "notification read-all"),
     ("clearAllNotifications", "notification clear-all"),
@@ -58,6 +61,22 @@ const EXPECTED_OPERATIONS: &[(&str, &str)] = &[
     ("updateTimeEntry", "time-entry update"),
     // Search
     ("globalSearch", "search"),
+    // Workspace members (dedicated endpoint)
+    ("getWorkspaceMembers", "workspace members"),
+    // Comments (first-class, maps to activity commands)
+    ("getTaskComments", "activity comment (new API)"),
+    ("createTaskComment", "activity comment (new API)"),
+    ("updateTaskComment", "activity edit-comment (new API)"),
+    ("deleteTaskComment", "activity delete-comment (new API)"),
+    // Task Relations (planned)
+    ("getTaskRelations", "task-relation ls (planned)"),
+    ("createTaskRelation", "task-relation create (planned)"),
+    ("deleteTaskRelation", "task-relation rm (planned)"),
+    // Bulk operations (planned)
+    ("bulkUpdateTasks", "task bulk (planned)"),
+    // Internal
+    ("createActivity", "activity create (internal)"),
+    ("getConfig", "internal"),
     // Invitations
     ("getUserPendingInvitations", "invitation pending"),
     ("getInvitationDetails", "invitation get"),

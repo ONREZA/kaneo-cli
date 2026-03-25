@@ -133,17 +133,8 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("workspace ID required"))?;
 
-            let result: serde_json::Value = client
-                .get(&format!(
-                    "/auth/organization/get-full-organization?organizationId={ws_id}"
-                ))
-                .await?;
-
-            let members = result
-                .get("members")
-                .and_then(|v| v.as_array())
-                .cloned()
-                .unwrap_or_default();
+            let members: Vec<crate::api::types::WorkspaceMemberInfo> =
+                client.get(&format!("/workspace/{ws_id}/members")).await?;
 
             if json {
                 output::json_output(&members);
@@ -399,7 +390,7 @@ fn print_org_details(result: &serde_json::Value) {
     }
 }
 
-fn print_members(members: &[serde_json::Value]) {
+fn print_members(members: &[crate::api::types::WorkspaceMemberInfo]) {
     if members.is_empty() {
         output::warn(false, "No members found");
         return;
@@ -407,21 +398,11 @@ fn print_members(members: &[serde_json::Value]) {
     let bold = console::Style::new().bold();
     let dim = console::Style::new().dim();
     for m in members {
-        let user = m.get("user");
-        let name = user
-            .and_then(|u| u.get("name"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("?");
-        let email = user
-            .and_then(|u| u.get("email"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        let role = m.get("role").and_then(|v| v.as_str()).unwrap_or("member");
         eprintln!(
             "  {} {} {}",
-            bold.apply_to(name),
-            dim.apply_to(email),
-            dim.apply_to(format!("[{role}]")),
+            bold.apply_to(&m.name),
+            dim.apply_to(&m.email),
+            dim.apply_to(format!("[{}]", m.role)),
         );
     }
 }
