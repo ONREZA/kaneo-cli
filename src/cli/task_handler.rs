@@ -1,6 +1,6 @@
 use crate::api::ApiClient;
 use crate::api::client::upload_to_presigned_url;
-use crate::api::types::{BulkUpdateResult, Column, CreateTaskBody, Task};
+use crate::api::types::{BulkUpdateResult, Column, CreateTaskBody, Project, Task};
 use crate::auth::{self, ResolvedContext};
 use crate::cli::{TaskArgs, TaskCommand};
 use crate::output;
@@ -24,7 +24,7 @@ fn parse_task_ref(id: &str) -> Option<(&str, i64)> {
 }
 
 /// Resolve a task identifier. If it looks like "PREFIX-123", resolve it
-/// via server-side search. Otherwise return as-is.
+/// via server-side search first, then fall back to board scan.
 async fn resolve_task_id(
     id: &str,
     ctx: &ResolvedContext,
@@ -36,25 +36,74 @@ async fn resolve_task_id(
     };
 
     let ws = auth::require_workspace(ctx)?;
-    let query = format!("{slug}-{number}");
-    let results: serde_json::Value = client
-        .get_query(
-            "/search",
-            &[
-                ("q", query.as_str()),
-                ("workspaceId", ws),
-                ("type", "tasks"),
-                ("limit", "5"),
-            ],
-        )
-        .await?;
 
-    if let Some(tasks) = results.get("tasks").and_then(|v| v.as_array()) {
-        for t in tasks {
-            if t.get("number").and_then(|v| v.as_i64()) == Some(number)
-                && let Some(tid) = t.get("id").and_then(|v| v.as_str())
-            {
-                return Ok(tid.to_string());
+    // Try search API first (single call, works when search is indexed)
+    let query = format!("{slug}-{number}");
+    let search_query: Vec<(&str, &str)> = vec![
+        ("q", query.as_str()),
+        ("workspaceId", ws),
+        ("type", "tasks"),
+        ("limit", "5"),
+    ];
+    if let Ok(results) = client
+        .get_query::<serde_json::Value, _>("/search", &search_query)
+        .await
+    {
+        // Handle both response formats: { tasks: [] } and { results: [] }
+        let tasks = results
+            .get("tasks")
+            .or_else(|| results.get("results"))
+            .and_then(|v| v.as_array());
+        if let Some(tasks) = tasks {
+            for t in tasks {
+                if t.get("number").and_then(|v| v.as_i64()) == Some(number)
+                    && let Some(tid) = t.get("id").and_then(|v| v.as_str())
+                {
+                    return Ok(tid.to_string());
+                }
+            }
+        }
+    }
+
+    // Fallback: find project by slug, then scan the board
+    let projects: Vec<Project> = client.get_query("/project", &[("workspaceId", ws)]).await?;
+    let project = projects
+        .iter()
+        .find(|p| p.slug.eq_ignore_ascii_case(slug))
+        .ok_or_else(|| anyhow::anyhow!("no project with slug '{slug}' (from '{id}')"))?;
+
+    let board: serde_json::Value = client.get(&format!("/task/tasks/{}", project.id)).await?;
+
+    // Handle both formats: direct { columns, plannedTasks, ... }
+    // and wrapped { data: { columns, plannedTasks, ... }, pagination }
+    let root = board.get("data").unwrap_or(&board);
+
+    let columns = root
+        .as_array()
+        .or_else(|| root.get("columns").and_then(|v| v.as_array()));
+
+    if let Some(cols) = columns {
+        for col in cols {
+            if let Some(tasks) = col.get("tasks").and_then(|v| v.as_array()) {
+                for t in tasks {
+                    if t.get("number").and_then(|v| v.as_i64()) == Some(number)
+                        && let Some(tid) = t.get("id").and_then(|v| v.as_str())
+                    {
+                        return Ok(tid.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    for section in ["plannedTasks", "archivedTasks"] {
+        if let Some(tasks) = root.get(section).and_then(|v| v.as_array()) {
+            for t in tasks {
+                if t.get("number").and_then(|v| v.as_i64()) == Some(number)
+                    && let Some(tid) = t.get("id").and_then(|v| v.as_str())
+                {
+                    return Ok(tid.to_string());
+                }
             }
         }
     }
@@ -539,9 +588,12 @@ fn print_board(board: &serde_json::Value) {
     let dim = console::Style::new().dim();
     let cyan = console::Style::new().cyan();
 
-    let columns_arr = board
+    // Handle both formats: direct { columns, ... } and wrapped { data: { columns, ... }, pagination }
+    let root = board.get("data").unwrap_or(board);
+
+    let columns_arr = root
         .as_array()
-        .or_else(|| board.get("columns").and_then(|v| v.as_array()));
+        .or_else(|| root.get("columns").and_then(|v| v.as_array()));
 
     if let Some(columns) = columns_arr {
         for col in columns {
@@ -563,7 +615,7 @@ fn print_board(board: &serde_json::Value) {
         }
 
         // Show planned tasks if present
-        if let Some(planned) = board.get("plannedTasks").and_then(|v| v.as_array())
+        if let Some(planned) = root.get("plannedTasks").and_then(|v| v.as_array())
             && !planned.is_empty()
         {
             eprintln!(
@@ -577,7 +629,7 @@ fn print_board(board: &serde_json::Value) {
         }
 
         // Show archived tasks if present
-        if let Some(archived) = board.get("archivedTasks").and_then(|v| v.as_array())
+        if let Some(archived) = root.get("archivedTasks").and_then(|v| v.as_array())
             && !archived.is_empty()
         {
             eprintln!(
