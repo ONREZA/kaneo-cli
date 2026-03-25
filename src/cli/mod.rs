@@ -1,6 +1,7 @@
 pub mod activity_handler;
 pub mod api_check_handler;
 pub mod column_handler;
+pub mod comment_handler;
 pub mod external_link_handler;
 pub mod invitation_handler;
 pub mod label_handler;
@@ -11,6 +12,7 @@ pub mod profile_handler;
 pub mod project_handler;
 pub mod search_handler;
 pub mod task_handler;
+pub mod task_relation_handler;
 pub mod time_entry_handler;
 pub mod whoami_handler;
 pub mod workspace_handler;
@@ -85,8 +87,15 @@ pub enum Command {
     /// Manage labels
     Label(LabelArgs),
 
-    /// View task activity and comments
+    /// View task activity and comments (legacy)
     Activity(ActivityArgs),
+
+    /// Manage task comments
+    Comment(CommentArgs),
+
+    /// Manage task relations
+    #[command(alias = "rel")]
+    TaskRelation(TaskRelationArgs),
 
     /// Manage notifications
     #[command(alias = "notif")]
@@ -392,6 +401,31 @@ impl SortOrder {
     }
 }
 
+#[derive(Debug, Clone, clap::ValueEnum)]
+pub enum BulkOperation {
+    UpdateStatus,
+    UpdatePriority,
+    UpdateAssignee,
+    Delete,
+    AddLabel,
+    RemoveLabel,
+    UpdateDueDate,
+}
+
+impl BulkOperation {
+    pub fn as_api_str(&self) -> &'static str {
+        match self {
+            Self::UpdateStatus => "updateStatus",
+            Self::UpdatePriority => "updatePriority",
+            Self::UpdateAssignee => "updateAssignee",
+            Self::Delete => "delete",
+            Self::AddLabel => "addLabel",
+            Self::RemoveLabel => "removeLabel",
+            Self::UpdateDueDate => "updateDueDate",
+        }
+    }
+}
+
 #[derive(Parser)]
 pub struct TaskArgs {
     #[command(subcommand)]
@@ -535,6 +569,17 @@ pub enum TaskCommand {
         /// Surface: description or comment
         #[arg(long, default_value = "description")]
         surface: String,
+    },
+    /// Bulk update multiple tasks
+    Bulk {
+        /// Comma-separated task IDs
+        task_ids: String,
+        /// Operation to perform
+        #[arg(long)]
+        operation: BulkOperation,
+        /// Value for the operation (status name, priority, user ID, label ID, date)
+        #[arg(long)]
+        value: Option<String>,
     },
 }
 
@@ -782,6 +827,95 @@ pub enum TimeEntryCommand {
         /// Description
         #[arg(long)]
         description: Option<String>,
+    },
+}
+
+// --- Comment (first-class) ---
+
+#[derive(Parser)]
+pub struct CommentArgs {
+    #[command(subcommand)]
+    pub command: CommentCommand,
+}
+
+#[derive(Subcommand)]
+pub enum CommentCommand {
+    /// List comments on a task
+    #[command(alias = "ls")]
+    List {
+        /// Task ID
+        task_id: String,
+    },
+    /// Add a comment to a task
+    Create {
+        /// Task ID
+        task_id: String,
+        /// Comment text
+        content: String,
+    },
+    /// Edit a comment
+    Update {
+        /// Comment ID
+        id: String,
+        /// New comment text
+        content: String,
+    },
+    /// Delete a comment
+    #[command(alias = "rm")]
+    Delete {
+        /// Comment ID
+        id: String,
+    },
+}
+
+// --- Task Relation ---
+
+#[derive(Debug, Clone, clap::ValueEnum)]
+pub enum RelationType {
+    Subtask,
+    Blocks,
+    Related,
+}
+
+impl RelationType {
+    pub fn as_api_str(&self) -> &'static str {
+        match self {
+            Self::Subtask => "subtask",
+            Self::Blocks => "blocks",
+            Self::Related => "related",
+        }
+    }
+}
+
+#[derive(Parser)]
+pub struct TaskRelationArgs {
+    #[command(subcommand)]
+    pub command: TaskRelationCommand,
+}
+
+#[derive(Subcommand)]
+pub enum TaskRelationCommand {
+    /// List relations for a task
+    #[command(alias = "ls")]
+    List {
+        /// Task ID
+        task_id: String,
+    },
+    /// Create a relation between tasks
+    Create {
+        /// Source task ID
+        source: String,
+        /// Target task ID
+        target: String,
+        /// Relation type
+        #[arg(long, value_name = "TYPE")]
+        r#type: RelationType,
+    },
+    /// Delete a relation
+    #[command(alias = "rm")]
+    Delete {
+        /// Relation ID
+        id: String,
     },
 }
 
@@ -1357,5 +1491,176 @@ mod tests {
     fn sort_order_api_str() {
         assert_eq!(SortOrder::Asc.as_api_str(), "asc");
         assert_eq!(SortOrder::Desc.as_api_str(), "desc");
+    }
+
+    // --- Bulk operations ---
+
+    #[test]
+    fn task_bulk() {
+        let cli = parse(&["kaneo", "t", "bulk", "id1,id2,id3", "--operation", "delete"]);
+        if let Command::Task(args) = cli.command {
+            if let TaskCommand::Bulk {
+                task_ids,
+                operation,
+                value,
+            } = args.command
+            {
+                assert_eq!(task_ids, "id1,id2,id3");
+                assert!(matches!(operation, BulkOperation::Delete));
+                assert!(value.is_none());
+            } else {
+                panic!("expected Bulk");
+            }
+        } else {
+            panic!("expected Task");
+        }
+    }
+
+    #[test]
+    fn task_bulk_with_value() {
+        let cli = parse(&[
+            "kaneo",
+            "t",
+            "bulk",
+            "id1,id2",
+            "--operation",
+            "update-status",
+            "--value",
+            "done",
+        ]);
+        if let Command::Task(args) = cli.command {
+            if let TaskCommand::Bulk {
+                operation, value, ..
+            } = args.command
+            {
+                assert!(matches!(operation, BulkOperation::UpdateStatus));
+                assert_eq!(value.as_deref(), Some("done"));
+            } else {
+                panic!("expected Bulk");
+            }
+        } else {
+            panic!("expected Task");
+        }
+    }
+
+    #[test]
+    fn bulk_operation_api_str() {
+        assert_eq!(BulkOperation::UpdateStatus.as_api_str(), "updateStatus");
+        assert_eq!(BulkOperation::UpdatePriority.as_api_str(), "updatePriority");
+        assert_eq!(BulkOperation::UpdateAssignee.as_api_str(), "updateAssignee");
+        assert_eq!(BulkOperation::Delete.as_api_str(), "delete");
+        assert_eq!(BulkOperation::AddLabel.as_api_str(), "addLabel");
+        assert_eq!(BulkOperation::RemoveLabel.as_api_str(), "removeLabel");
+        assert_eq!(BulkOperation::UpdateDueDate.as_api_str(), "updateDueDate");
+    }
+
+    // --- Task Relations ---
+
+    #[test]
+    fn task_relation_alias() {
+        let cli = parse(&["kaneo", "rel", "ls", "task-1"]);
+        assert!(matches!(cli.command, Command::TaskRelation(_)));
+    }
+
+    #[test]
+    fn task_relation_create() {
+        let cli = parse(&[
+            "kaneo",
+            "task-relation",
+            "create",
+            "src-1",
+            "tgt-1",
+            "--type",
+            "subtask",
+        ]);
+        if let Command::TaskRelation(args) = cli.command {
+            if let TaskRelationCommand::Create {
+                source,
+                target,
+                r#type,
+            } = args.command
+            {
+                assert_eq!(source, "src-1");
+                assert_eq!(target, "tgt-1");
+                assert!(matches!(r#type, RelationType::Subtask));
+            } else {
+                panic!("expected Create");
+            }
+        } else {
+            panic!("expected TaskRelation");
+        }
+    }
+
+    #[test]
+    fn task_relation_delete() {
+        let cli = parse(&["kaneo", "rel", "rm", "rel-1"]);
+        if let Command::TaskRelation(args) = cli.command {
+            assert!(matches!(args.command, TaskRelationCommand::Delete { .. }));
+        } else {
+            panic!("expected TaskRelation");
+        }
+    }
+
+    #[test]
+    fn relation_type_api_str() {
+        assert_eq!(RelationType::Subtask.as_api_str(), "subtask");
+        assert_eq!(RelationType::Blocks.as_api_str(), "blocks");
+        assert_eq!(RelationType::Related.as_api_str(), "related");
+    }
+
+    // --- Comments (first-class) ---
+
+    #[test]
+    fn comment_list() {
+        let cli = parse(&["kaneo", "comment", "ls", "task-1"]);
+        if let Command::Comment(args) = cli.command {
+            if let CommentCommand::List { task_id } = args.command {
+                assert_eq!(task_id, "task-1");
+            } else {
+                panic!("expected List");
+            }
+        } else {
+            panic!("expected Comment");
+        }
+    }
+
+    #[test]
+    fn comment_create() {
+        let cli = parse(&["kaneo", "comment", "create", "task-1", "Hello world"]);
+        if let Command::Comment(args) = cli.command {
+            if let CommentCommand::Create { task_id, content } = args.command {
+                assert_eq!(task_id, "task-1");
+                assert_eq!(content, "Hello world");
+            } else {
+                panic!("expected Create");
+            }
+        } else {
+            panic!("expected Comment");
+        }
+    }
+
+    #[test]
+    fn comment_update() {
+        let cli = parse(&["kaneo", "comment", "update", "c-1", "Updated text"]);
+        if let Command::Comment(args) = cli.command {
+            if let CommentCommand::Update { id, content } = args.command {
+                assert_eq!(id, "c-1");
+                assert_eq!(content, "Updated text");
+            } else {
+                panic!("expected Update");
+            }
+        } else {
+            panic!("expected Comment");
+        }
+    }
+
+    #[test]
+    fn comment_delete() {
+        let cli = parse(&["kaneo", "comment", "rm", "c-1"]);
+        if let Command::Comment(args) = cli.command {
+            assert!(matches!(args.command, CommentCommand::Delete { .. }));
+        } else {
+            panic!("expected Comment");
+        }
     }
 }

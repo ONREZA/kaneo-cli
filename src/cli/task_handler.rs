@@ -1,6 +1,6 @@
 use crate::api::ApiClient;
 use crate::api::client::upload_to_presigned_url;
-use crate::api::types::{Column, CreateTaskBody, Project, Task};
+use crate::api::types::{BulkUpdateResult, Column, CreateTaskBody, Task};
 use crate::auth::{self, ResolvedContext};
 use crate::cli::{TaskArgs, TaskCommand};
 use crate::output;
@@ -24,7 +24,7 @@ fn parse_task_ref(id: &str) -> Option<(&str, i64)> {
 }
 
 /// Resolve a task identifier. If it looks like "PREFIX-123", resolve it
-/// by finding the project by slug and the task by number. Otherwise return as-is.
+/// via server-side search. Otherwise return as-is.
 async fn resolve_task_id(
     id: &str,
     ctx: &ResolvedContext,
@@ -36,48 +36,30 @@ async fn resolve_task_id(
     };
 
     let ws = auth::require_workspace(ctx)?;
-    let projects: Vec<Project> = client.get_query("/project", &[("workspaceId", ws)]).await?;
+    let query = format!("{slug}-{number}");
+    let results: serde_json::Value = client
+        .get_query(
+            "/search",
+            &[
+                ("q", query.as_str()),
+                ("workspaceId", ws),
+                ("type", "tasks"),
+                ("limit", "5"),
+            ],
+        )
+        .await?;
 
-    let project = projects
-        .iter()
-        .find(|p| p.slug.eq_ignore_ascii_case(slug))
-        .ok_or_else(|| anyhow::anyhow!("no project with slug '{slug}' (from '{id}')"))?;
-
-    // Fetch the board to find the task by number
-    let board: serde_json::Value = client.get(&format!("/task/tasks/{}", project.id)).await?;
-
-    // Search across columns, plannedTasks, archivedTasks
-    let columns = board
-        .as_array()
-        .or_else(|| board.get("columns").and_then(|v| v.as_array()));
-
-    if let Some(cols) = columns {
-        for col in cols {
-            if let Some(tasks) = col.get("tasks").and_then(|v| v.as_array()) {
-                for t in tasks {
-                    if t.get("number").and_then(|v| v.as_i64()) == Some(number)
-                        && let Some(tid) = t.get("id").and_then(|v| v.as_str())
-                    {
-                        return Ok(tid.to_string());
-                    }
-                }
+    if let Some(tasks) = results.get("tasks").and_then(|v| v.as_array()) {
+        for t in tasks {
+            if t.get("number").and_then(|v| v.as_i64()) == Some(number)
+                && let Some(tid) = t.get("id").and_then(|v| v.as_str())
+            {
+                return Ok(tid.to_string());
             }
         }
     }
 
-    for section in ["plannedTasks", "archivedTasks"] {
-        if let Some(tasks) = board.get(section).and_then(|v| v.as_array()) {
-            for t in tasks {
-                if t.get("number").and_then(|v| v.as_i64()) == Some(number)
-                    && let Some(tid) = t.get("id").and_then(|v| v.as_str())
-                {
-                    return Ok(tid.to_string());
-                }
-            }
-        }
-    }
-
-    anyhow::bail!("task #{number} not found in project '{slug}'")
+    anyhow::bail!("task {slug}-{number} not found")
 }
 
 pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::Result<()> {
@@ -474,6 +456,44 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 output::success(
                     false,
                     &format!("Uploaded '{filename}' → {asset_id}\n    {asset_url}"),
+                );
+            }
+        }
+
+        TaskCommand::Bulk {
+            task_ids,
+            operation,
+            value,
+        } => {
+            let ids: Vec<String> = task_ids.split(',').map(|s| s.trim().to_string()).collect();
+            #[derive(Serialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Body {
+                task_ids: Vec<String>,
+                operation: String,
+                #[serde(skip_serializing_if = "Option::is_none")]
+                value: Option<String>,
+            }
+            let result: BulkUpdateResult = client
+                .patch(
+                    "/task/bulk",
+                    &Body {
+                        task_ids: ids,
+                        operation: operation.as_api_str().to_string(),
+                        value,
+                    },
+                )
+                .await?;
+
+            if json {
+                output::json_output(&result);
+            } else {
+                output::success(
+                    false,
+                    &format!(
+                        "Bulk operation complete: {} tasks updated",
+                        result.updated_count
+                    ),
                 );
             }
         }

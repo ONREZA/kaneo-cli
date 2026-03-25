@@ -274,7 +274,6 @@ pub struct ServerConfig {
 
 // --- Comment (first-class) ---
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Comment {
@@ -288,7 +287,6 @@ pub struct Comment {
     pub user: Option<CommentUser>,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommentUser {
     pub name: String,
@@ -298,7 +296,6 @@ pub struct CommentUser {
 
 // --- Task Relation ---
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskRelation {

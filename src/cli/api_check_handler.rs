@@ -63,17 +63,17 @@ const EXPECTED_OPERATIONS: &[(&str, &str)] = &[
     ("globalSearch", "search"),
     // Workspace members (dedicated endpoint)
     ("getWorkspaceMembers", "workspace members"),
-    // Comments (first-class, maps to activity commands)
-    ("getTaskComments", "activity comment (new API)"),
-    ("createTaskComment", "activity comment (new API)"),
-    ("updateTaskComment", "activity edit-comment (new API)"),
-    ("deleteTaskComment", "activity delete-comment (new API)"),
-    // Task Relations (planned)
-    ("getTaskRelations", "task-relation ls (planned)"),
-    ("createTaskRelation", "task-relation create (planned)"),
-    ("deleteTaskRelation", "task-relation rm (planned)"),
-    // Bulk operations (planned)
-    ("bulkUpdateTasks", "task bulk (planned)"),
+    // Comments (first-class)
+    ("getTaskComments", "comment ls"),
+    ("createTaskComment", "comment create"),
+    ("updateTaskComment", "comment update"),
+    ("deleteTaskComment", "comment delete"),
+    // Task Relations
+    ("getTaskRelations", "task-relation ls"),
+    ("createTaskRelation", "task-relation create"),
+    ("deleteTaskRelation", "task-relation rm"),
+    // Bulk operations
+    ("bulkUpdateTasks", "task bulk"),
     // Internal
     ("createActivity", "activity create (internal)"),
     ("getConfig", "internal"),
