@@ -32,6 +32,8 @@ pub const PROJECT_CREATE: (&str, &str) = ("POST", "/project");
 pub const PROJECT_GET: (&str, &str) = ("GET", "/project/{id}");
 pub const PROJECT_UPDATE: (&str, &str) = ("PUT", "/project/{id}");
 pub const PROJECT_DELETE: (&str, &str) = ("DELETE", "/project/{id}");
+pub const PROJECT_ARCHIVE: (&str, &str) = ("PUT", "/project/{id}/archive");
+pub const PROJECT_UNARCHIVE: (&str, &str) = ("PUT", "/project/{id}/unarchive");
 
 // --- Task ---
 pub const TASK_LIST: (&str, &str) = ("GET", "/task/tasks/{projectId}");
@@ -49,6 +51,7 @@ pub const TASK_EXPORT: (&str, &str) = ("GET", "/task/export/{projectId}");
 pub const TASK_IMPORT: (&str, &str) = ("POST", "/task/import/{projectId}");
 pub const TASK_IMAGE_UPLOAD: (&str, &str) = ("PUT", "/task/image-upload/{id}");
 pub const TASK_IMAGE_UPLOAD_FINALIZE: (&str, &str) = ("POST", "/task/image-upload/{id}/finalize");
+pub const TASK_BULK: (&str, &str) = ("PATCH", "/task/bulk");
 
 // --- Column ---
 pub const COLUMN_LIST: (&str, &str) = ("GET", "/column/{projectId}");
@@ -61,6 +64,7 @@ pub const COLUMN_REORDER: (&str, &str) = ("PUT", "/column/reorder/{projectId}");
 pub const LABEL_LIST_WORKSPACE: (&str, &str) = ("GET", "/label/workspace/{workspaceId}");
 pub const LABEL_LIST_TASK: (&str, &str) = ("GET", "/label/task/{taskId}");
 pub const LABEL_CREATE: (&str, &str) = ("POST", "/label");
+pub const LABEL_GET: (&str, &str) = ("GET", "/label/{id}");
 pub const LABEL_UPDATE: (&str, &str) = ("PUT", "/label/{id}");
 pub const LABEL_DELETE: (&str, &str) = ("DELETE", "/label/{id}");
 pub const LABEL_ATTACH: (&str, &str) = ("PUT", "/label/{id}/task");
@@ -72,8 +76,20 @@ pub const ACTIVITY_CREATE_COMMENT: (&str, &str) = ("POST", "/activity/comment");
 pub const ACTIVITY_UPDATE_COMMENT: (&str, &str) = ("PUT", "/activity/comment");
 pub const ACTIVITY_DELETE_COMMENT: (&str, &str) = ("DELETE", "/activity/comment");
 
+// --- Comment (first-class) ---
+pub const COMMENT_LIST: (&str, &str) = ("GET", "/comment/{taskId}");
+pub const COMMENT_CREATE: (&str, &str) = ("POST", "/comment/{taskId}");
+pub const COMMENT_UPDATE: (&str, &str) = ("PUT", "/comment/{id}");
+pub const COMMENT_DELETE: (&str, &str) = ("DELETE", "/comment/{id}");
+
+// --- Task Relation ---
+pub const TASK_RELATION_LIST: (&str, &str) = ("GET", "/task-relation/{taskId}");
+pub const TASK_RELATION_CREATE: (&str, &str) = ("POST", "/task-relation");
+pub const TASK_RELATION_DELETE: (&str, &str) = ("DELETE", "/task-relation/{id}");
+
 // --- Notification ---
 pub const NOTIFICATION_LIST: (&str, &str) = ("GET", "/notification");
+pub const NOTIFICATION_CREATE: (&str, &str) = ("POST", "/notification");
 pub const NOTIFICATION_MARK_READ: (&str, &str) = ("PATCH", "/notification/{id}/read");
 pub const NOTIFICATION_MARK_ALL_READ: (&str, &str) = ("PATCH", "/notification/read-all");
 pub const NOTIFICATION_CLEAR_ALL: (&str, &str) = ("DELETE", "/notification/clear-all");
@@ -83,6 +99,16 @@ pub const TIME_ENTRY_LIST: (&str, &str) = ("GET", "/time-entry/task/{taskId}");
 pub const TIME_ENTRY_GET: (&str, &str) = ("GET", "/time-entry/{id}");
 pub const TIME_ENTRY_CREATE: (&str, &str) = ("POST", "/time-entry");
 pub const TIME_ENTRY_UPDATE: (&str, &str) = ("PUT", "/time-entry/{id}");
+
+// --- External Link ---
+pub const EXTERNAL_LINK_LIST_TASK: (&str, &str) = ("GET", "/external-link/task/{taskId}");
+
+// --- Invitation ---
+pub const INVITATION_PENDING: (&str, &str) = ("GET", "/invitation/pending");
+pub const INVITATION_GET: (&str, &str) = ("GET", "/invitation/{id}");
+
+// --- Workspace Members (dedicated) ---
+pub const WORKSPACE_MEMBERS: (&str, &str) = ("GET", "/workspace/{workspaceId}/members");
 
 // --- Search ---
 pub const SEARCH: (&str, &str) = ("GET", "/search");
@@ -118,6 +144,8 @@ pub const ALL_ROUTES: &[(&str, &str)] = &[
     PROJECT_GET,
     PROJECT_UPDATE,
     PROJECT_DELETE,
+    PROJECT_ARCHIVE,
+    PROJECT_UNARCHIVE,
     TASK_LIST,
     TASK_GET,
     TASK_CREATE,
@@ -133,6 +161,7 @@ pub const ALL_ROUTES: &[(&str, &str)] = &[
     TASK_IMPORT,
     TASK_IMAGE_UPLOAD,
     TASK_IMAGE_UPLOAD_FINALIZE,
+    TASK_BULK,
     COLUMN_LIST,
     COLUMN_CREATE,
     COLUMN_UPDATE,
@@ -141,6 +170,7 @@ pub const ALL_ROUTES: &[(&str, &str)] = &[
     LABEL_LIST_WORKSPACE,
     LABEL_LIST_TASK,
     LABEL_CREATE,
+    LABEL_GET,
     LABEL_UPDATE,
     LABEL_DELETE,
     LABEL_ATTACH,
@@ -149,7 +179,15 @@ pub const ALL_ROUTES: &[(&str, &str)] = &[
     ACTIVITY_CREATE_COMMENT,
     ACTIVITY_UPDATE_COMMENT,
     ACTIVITY_DELETE_COMMENT,
+    COMMENT_LIST,
+    COMMENT_CREATE,
+    COMMENT_UPDATE,
+    COMMENT_DELETE,
+    TASK_RELATION_LIST,
+    TASK_RELATION_CREATE,
+    TASK_RELATION_DELETE,
     NOTIFICATION_LIST,
+    NOTIFICATION_CREATE,
     NOTIFICATION_MARK_READ,
     NOTIFICATION_MARK_ALL_READ,
     NOTIFICATION_CLEAR_ALL,
@@ -157,6 +195,10 @@ pub const ALL_ROUTES: &[(&str, &str)] = &[
     TIME_ENTRY_GET,
     TIME_ENTRY_CREATE,
     TIME_ENTRY_UPDATE,
+    EXTERNAL_LINK_LIST_TASK,
+    INVITATION_PENDING,
+    INVITATION_GET,
+    WORKSPACE_MEMBERS,
     SEARCH,
     ASSET_GET,
 ];
