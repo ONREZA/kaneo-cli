@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2026-03-25
+
+### ✨ Features
+
+- **cli:** add bulk ops, task relations, comments, refactor resolve_task_id ([48afa22](https://github.com/ONREZA/kaneo-cli/commit/48afa2282d36b63a867487114104d880dd3e227a))
+- **cli:** adapt to Kaneo v2.3.16, add archival, sorting, new resources ([ad3d72e](https://github.com/ONREZA/kaneo-cli/commit/ad3d72e332e4b4a12baf764fc7c917adf9937f8c))
+
 ## [0.6.0] - 2026-03-20
 
 ### ✨ Features
