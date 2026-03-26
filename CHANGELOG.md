@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.1] - 2026-03-26
+
+### 🐛 Bug Fixes
+
+- **cli:** register all new routes in routes.rs for spec validation ([9663067](https://github.com/ONREZA/kaneo-cli/commit/96630676a67c80c57013d9d5449e0276b3e89711))
+- **cli:** handle wrapped board response and search fallback ([97e434f](https://github.com/ONREZA/kaneo-cli/commit/97e434fed0b481fda4173ce5b6dd31f59053e542))
+
 ## [0.7.0] - 2026-03-25
 
 ### ✨ Features
