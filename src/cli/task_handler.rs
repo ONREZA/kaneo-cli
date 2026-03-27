@@ -1,7 +1,9 @@
 use crate::api::client::upload_to_presigned_url;
 use crate::api::types::{BulkUpdateResult, Column, CreateTaskBody, Task};
 use crate::auth::ResolvedContext;
-use crate::cli::resolve::{inject_task_ref, parse_task_ref, resolve_project, resolve_task_id};
+use crate::cli::resolve::{
+    inject_task_ref, parse_task_ref, resolve_project, resolve_task_id, validate_status,
+};
 use crate::cli::{TaskArgs, TaskCommand};
 use crate::output;
 use serde::Serialize;
@@ -48,8 +50,12 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
         } => {
             let project_id = resolve_project(project_id, ctx)?;
 
-            // Don't send "planned"/"archived" as server-side status filter —
-            // these are virtual statuses that we filter client-side
+            // Validate and normalize status against actual columns
+            let status = match status {
+                Some(s) => Some(validate_status(&s, &project_id, &client).await?),
+                None => None,
+            };
+
             let is_virtual_status = status
                 .as_deref()
                 .is_some_and(|s| s == "planned" || s == "archived");
@@ -139,6 +145,7 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             assignee,
         } => {
             let project_id = resolve_project(None, ctx)?;
+            let status = validate_status(&status, &project_id, &client).await?;
             let body = CreateTaskBody {
                 title,
                 description,
@@ -165,10 +172,10 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
 
         TaskCommand::Status { id, status } => {
             let id = resolve_task_id(&id, ctx, &client).await?;
+            let current: Task = client.get(&format!("/task/{id}")).await?;
             let status = match status {
-                Some(s) => s,
+                Some(s) => validate_status(&s, &current.project_id, &client).await?,
                 None if output::is_interactive() => {
-                    let current: Task = client.get(&format!("/task/{id}")).await?;
                     let columns: Vec<Column> = client
                         .get(&format!("/column/{}", current.project_id))
                         .await?;

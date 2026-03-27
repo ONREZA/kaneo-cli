@@ -115,6 +115,46 @@ pub fn resolve_project(arg: Option<String>, ctx: &ResolvedContext) -> anyhow::Re
     }
 }
 
+/// Convert a column display name to its slug form (what tasks use as status).
+/// "To Do" → "to-do", "In Progress" → "in-progress"
+fn column_slug(name: &str) -> String {
+    name.to_lowercase().replace(' ', "-")
+}
+
+/// Validate a status value against actual project columns.
+/// Returns the status slug (lowercase-hyphenated form used in task objects).
+/// Accepts column display names ("To Do"), slugs ("to-do"), and virtual statuses.
+pub async fn validate_status(
+    status: &str,
+    project_id: &str,
+    client: &ApiClient,
+) -> anyhow::Result<String> {
+    // Virtual statuses — no column lookup needed
+    let input = status.trim();
+    let input_slug = column_slug(input);
+    if input_slug == "planned" || input_slug == "archived" || input_slug == "backlog" {
+        return Ok(input_slug);
+    }
+
+    let columns: Vec<crate::api::types::Column> =
+        client.get(&format!("/column/{project_id}")).await?;
+
+    // Match by display name (case-insensitive) or slug
+    for col in &columns {
+        if col.name.eq_ignore_ascii_case(input) || column_slug(&col.name) == input_slug {
+            return Ok(column_slug(&col.name));
+        }
+    }
+
+    let mut available: Vec<String> = columns.iter().map(|c| column_slug(&c.name)).collect();
+    available.extend(["planned".to_string(), "archived".to_string()]);
+
+    anyhow::bail!(
+        "unknown status \"{status}\". Available: {}",
+        available.join(", ")
+    )
+}
+
 /// Inject a `ref` field into a task's JSON value. Fetches the project if slug is unknown.
 pub async fn inject_task_ref(
     val: &mut serde_json::Value,
