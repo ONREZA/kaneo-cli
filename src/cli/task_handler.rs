@@ -172,15 +172,21 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 .get_query(&format!("/task/tasks/{project_id}"), &query)
                 .await?;
 
-            if json && !board_flag {
-                // Flat list mode: extract all tasks, add ref field
-                let tasks = flatten_board(&raw_board, status.as_deref(), all);
-                output::json_output(&tasks);
-            } else if json && board_flag {
-                // Raw board mode
-                output::json_output(&raw_board);
+            if board_flag {
+                // Board view: raw structure for JSON, kanban for human
+                if json {
+                    output::json_output(&raw_board);
+                } else {
+                    print_board(&raw_board);
+                }
             } else {
-                print_board(&raw_board);
+                // Default: flat list — same data for both JSON and human
+                let tasks = flatten_board(&raw_board, status.as_deref(), all);
+                if json {
+                    output::json_output(&tasks);
+                } else {
+                    print_task_table(&tasks);
+                }
             }
         }
 
@@ -189,29 +195,31 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             let id = resolve_task_id(&id, ctx, &client).await?;
             let task: Task = client.get(&format!("/task/{id}")).await?;
 
+            // Compute ref
+            let slug = if let Some((s, _)) = original_ref {
+                Some(s.to_string())
+            } else {
+                client
+                    .get::<Project>(&format!("/project/{}", task.project_id))
+                    .await
+                    .ok()
+                    .map(|p| p.slug)
+            };
+            let task_ref = match (&slug, task.number) {
+                (Some(s), Some(n)) => Some(format!("{s}-{n}")),
+                _ => None,
+            };
+
             if json {
                 let mut val = serde_json::to_value(&task)?;
-                // Add ref field — compute slug from original ref or fetch project
-                let slug = if let Some((s, _)) = original_ref {
-                    Some(s.to_string())
-                } else {
-                    client
-                        .get::<Project>(&format!("/project/{}", task.project_id))
-                        .await
-                        .ok()
-                        .map(|p| p.slug)
-                };
-                if let (Some(slug), Some(number)) = (slug, task.number)
+                if let Some(r) = &task_ref
                     && let Some(obj) = val.as_object_mut()
                 {
-                    obj.insert(
-                        "ref".to_string(),
-                        serde_json::json!(format!("{slug}-{number}")),
-                    );
+                    obj.insert("ref".to_string(), serde_json::json!(r));
                 }
                 output::json_output(&val);
             } else {
-                print_task(&task);
+                print_task(&task, task_ref.as_deref());
             }
         }
 
@@ -688,6 +696,41 @@ fn flatten_board(
     tasks
 }
 
+fn print_task_table(tasks: &[serde_json::Value]) {
+    if tasks.is_empty() {
+        output::warn(false, "No tasks found");
+        return;
+    }
+
+    let bold = console::Style::new().bold();
+    let dim = console::Style::new().dim();
+    let cyan = console::Style::new().cyan();
+
+    for t in tasks {
+        let ref_str = t.get("ref").and_then(|v| v.as_str()).unwrap_or("");
+        let title = t.get("title").and_then(|v| v.as_str()).unwrap_or("?");
+        let status = t.get("status").and_then(|v| v.as_str()).unwrap_or("");
+        let priority = t.get("priority").and_then(|v| v.as_str()).unwrap_or("");
+
+        let prio_icon = match priority {
+            "urgent" => "🔴",
+            "high" => "🟠",
+            "medium" => "🟡",
+            "low" => "🟢",
+            _ => "⚪",
+        };
+
+        eprintln!(
+            "  {prio_icon} {} {} {} {}",
+            cyan.apply_to(ref_str),
+            bold.apply_to(title),
+            dim.apply_to(status),
+            dim.apply_to(t.get("assigneeName").and_then(|v| v.as_str()).unwrap_or("")),
+        );
+    }
+    eprintln!();
+}
+
 fn print_board(board: &serde_json::Value) {
     let bold = console::Style::new().bold();
     let dim = console::Style::new().dim();
@@ -791,9 +834,10 @@ fn print_task_row(t: &serde_json::Value, cyan: &console::Style, dim: &console::S
     );
 }
 
-fn print_task(task: &Task) {
+fn print_task(task: &Task, task_ref: Option<&str>) {
     let bold = console::Style::new().bold();
     let dim = console::Style::new().dim();
+    let cyan = console::Style::new().cyan();
 
     let prio_icon = match task.priority.as_str() {
         "urgent" => "🔴",
@@ -803,12 +847,19 @@ fn print_task(task: &Task) {
         _ => "⚪",
     };
 
+    let ref_label = task_ref
+        .map(|r| r.to_string())
+        .unwrap_or_else(|| format!("#{}", task.number.unwrap_or(0)));
+
     eprintln!(
         "  {prio_icon} {} {}",
-        bold.apply_to(format!("#{}", task.number.unwrap_or(0))),
+        cyan.apply_to(&ref_label),
         bold.apply_to(&task.title),
     );
     eprintln!("  {} {}", dim.apply_to("id:"), task.id);
+    if let Some(r) = task_ref {
+        eprintln!("  {} {r}", dim.apply_to("ref:"));
+    }
     eprintln!("  {} {}", dim.apply_to("status:"), task.status);
     eprintln!("  {} {}", dim.apply_to("priority:"), task.priority);
 
