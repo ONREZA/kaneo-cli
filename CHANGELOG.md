@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2026-03-27
+
+### ⚠️ BREAKING CHANGES
+
+- **cli:** unify human and JSON output for task ls/get ([b6ef01c](https://github.com/ONREZA/kaneo-cli/commit/b6ef01c2a41d658ccdc9ad4f8da85065fc29bd6d))
+- **cli:** flat JSON output for task ls, add ref field, virtual statuses ([72244da](https://github.com/ONREZA/kaneo-cli/commit/72244da31c00eea62e53751a079c4b75ae72fb2c))
+
+### ♻️ Changed
+
+- **cli:** improve DX — shared ref resolution, partial updates, consistency ([682ca28](https://github.com/ONREZA/kaneo-cli/commit/682ca2815a1fecde107ed997331128943048a9af))
+
 ## [0.7.1] - 2026-03-26
 
 ### 🐛 Bug Fixes
