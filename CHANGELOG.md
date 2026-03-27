@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-03-27
+
+### ✨ Features
+
+- **cli:** validate task status against actual project columns ([c70d40a](https://github.com/ONREZA/kaneo-cli/commit/c70d40a80300137211ab2f1b81623664fc17f700))
+
 ## [0.8.0] - 2026-03-27
 
 ### ⚠️ BREAKING CHANGES
