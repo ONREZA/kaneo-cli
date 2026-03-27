@@ -434,12 +434,12 @@ pub struct TaskArgs {
 
 #[derive(Subcommand)]
 pub enum TaskCommand {
-    /// List tasks in a project (board view)
+    /// List tasks (flat list in JSON, board view in terminal)
     #[command(alias = "ls")]
     List {
         /// Project ID (falls back to -p / .kaneo.json)
         project_id: Option<String>,
-        /// Filter by status (column name)
+        /// Filter by status (column name, "planned", or "archived")
         #[arg(long)]
         status: Option<String>,
         /// Filter by priority
@@ -466,6 +466,12 @@ pub enum TaskCommand {
         /// Filter tasks due after this date (ISO format)
         #[arg(long)]
         due_after: Option<String>,
+        /// Include archived tasks
+        #[arg(long)]
+        all: bool,
+        /// Force board view (columns) instead of flat list in JSON mode
+        #[arg(long)]
+        board: bool,
     },
     /// Get task details
     Get {

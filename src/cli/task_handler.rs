@@ -126,11 +126,21 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             sort_order,
             due_before,
             due_after,
+            all,
+            board: board_flag,
         } => {
             let project_id = resolve_project(project_id, ctx)?;
 
+            // Don't send "planned"/"archived" as server-side status filter —
+            // these are virtual statuses that we filter client-side
+            let is_virtual_status = status
+                .as_deref()
+                .is_some_and(|s| s == "planned" || s == "archived");
+
             let mut query: Vec<(&str, String)> = Vec::new();
-            if let Some(s) = &status {
+            if let Some(s) = &status
+                && !is_virtual_status
+            {
                 query.push(("status", s.clone()));
             }
             if let Some(p) = &priority {
@@ -158,23 +168,48 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 query.push(("dueAfter", da.clone()));
             }
 
-            let board: serde_json::Value = client
+            let raw_board: serde_json::Value = client
                 .get_query(&format!("/task/tasks/{project_id}"), &query)
                 .await?;
 
-            if json {
-                output::json_output(&board);
+            if json && !board_flag {
+                // Flat list mode: extract all tasks, add ref field
+                let tasks = flatten_board(&raw_board, status.as_deref(), all);
+                output::json_output(&tasks);
+            } else if json && board_flag {
+                // Raw board mode
+                output::json_output(&raw_board);
             } else {
-                print_board(&board);
+                print_board(&raw_board);
             }
         }
 
         TaskCommand::Get { id } => {
+            let original_ref = parse_task_ref(&id);
             let id = resolve_task_id(&id, ctx, &client).await?;
             let task: Task = client.get(&format!("/task/{id}")).await?;
 
             if json {
-                output::json_output(&task);
+                let mut val = serde_json::to_value(&task)?;
+                // Add ref field — compute slug from original ref or fetch project
+                let slug = if let Some((s, _)) = original_ref {
+                    Some(s.to_string())
+                } else {
+                    client
+                        .get::<Project>(&format!("/project/{}", task.project_id))
+                        .await
+                        .ok()
+                        .map(|p| p.slug)
+                };
+                if let (Some(slug), Some(number)) = (slug, task.number)
+                    && let Some(obj) = val.as_object_mut()
+                {
+                    obj.insert(
+                        "ref".to_string(),
+                        serde_json::json!(format!("{slug}-{number}")),
+                    );
+                }
+                output::json_output(&val);
             } else {
                 print_task(&task);
             }
@@ -581,6 +616,76 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
     }
 
     Ok(())
+}
+
+/// Flatten the board response into a simple array of task objects.
+/// Each task gets a `ref` field (e.g. "DEP-42") computed from the project slug.
+/// By default, archived tasks are excluded unless `include_all` is true.
+/// If `status_filter` is set, only tasks matching that status are returned.
+fn flatten_board(
+    board: &serde_json::Value,
+    status_filter: Option<&str>,
+    include_all: bool,
+) -> Vec<serde_json::Value> {
+    let root = board.get("data").unwrap_or(board);
+    let slug = root.get("slug").and_then(|v| v.as_str()).unwrap_or("");
+
+    let mut tasks: Vec<serde_json::Value> = Vec::new();
+
+    // Collect tasks from columns
+    let columns = root
+        .as_array()
+        .or_else(|| root.get("columns").and_then(|v| v.as_array()));
+    if let Some(cols) = columns {
+        for col in cols {
+            if let Some(col_tasks) = col.get("tasks").and_then(|v| v.as_array()) {
+                for t in col_tasks {
+                    tasks.push(t.clone());
+                }
+            }
+        }
+    }
+
+    // Collect planned tasks
+    if let Some(planned) = root.get("plannedTasks").and_then(|v| v.as_array()) {
+        for t in planned {
+            tasks.push(t.clone());
+        }
+    }
+
+    // Collect archived tasks (only if --all or --status archived)
+    if (include_all || status_filter == Some("archived"))
+        && let Some(archived) = root.get("archivedTasks").and_then(|v| v.as_array())
+    {
+        for t in archived {
+            tasks.push(t.clone());
+        }
+    }
+
+    // Add ref field to each task
+    if !slug.is_empty() {
+        for t in &mut tasks {
+            if let Some(number) = t.get("number").and_then(|v| v.as_i64())
+                && let Some(obj) = t.as_object_mut()
+            {
+                obj.insert(
+                    "ref".to_string(),
+                    serde_json::Value::String(format!("{slug}-{number}")),
+                );
+            }
+        }
+    }
+
+    // Client-side status filter (for "planned", "archived", or any status)
+    if let Some(filter) = status_filter {
+        tasks.retain(|t| {
+            t.get("status")
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| s.eq_ignore_ascii_case(filter))
+        });
+    }
+
+    tasks
 }
 
 fn print_board(board: &serde_json::Value) {
