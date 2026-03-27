@@ -1,5 +1,6 @@
 use crate::api::ApiClient;
 use crate::auth::ResolvedContext;
+use crate::cli::resolve::resolve_workspace;
 use crate::cli::{WorkspaceArgs, WorkspaceCommand};
 use crate::output;
 use serde::Serialize;
@@ -37,12 +38,7 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
         }
 
         WorkspaceCommand::Get { id } => {
-            let ws_id = id
-                .as_deref()
-                .or(ctx.workspace_id.as_deref())
-                .ok_or_else(|| {
-                    anyhow::anyhow!("workspace ID required (--workspace or argument)")
-                })?;
+            let ws_id = resolve_workspace(id.as_deref(), ctx)?;
 
             let result: serde_json::Value = client
                 .get(&format!(
@@ -85,11 +81,7 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
             slug,
             logo,
         } => {
-            let ws_id = id
-                .as_deref()
-                .or(ctx.workspace_id.as_deref())
-                .ok_or_else(|| anyhow::anyhow!("workspace ID required (--workspace or --id)"))?
-                .to_string();
+            let ws_id = resolve_workspace(id.as_deref(), ctx)?.to_string();
 
             let mut data = serde_json::Map::new();
             if let Some(n) = &name {
@@ -128,10 +120,7 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
         }
 
         WorkspaceCommand::Members => {
-            let ws_id = ctx
-                .workspace_id
-                .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("workspace ID required"))?;
+            let ws_id = resolve_workspace(None, ctx)?;
 
             let members: Vec<crate::api::types::WorkspaceMemberInfo> =
                 client.get(&format!("/workspace/{ws_id}/members")).await?;
@@ -144,10 +133,7 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
         }
 
         WorkspaceCommand::Invite { email, role } => {
-            let ws_id = ctx
-                .workspace_id
-                .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("workspace ID required"))?;
+            let ws_id = resolve_workspace(None, ctx)?;
 
             let body = serde_json::json!({
                 "organizationId": ws_id,
@@ -167,10 +153,7 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
         }
 
         WorkspaceCommand::RemoveMember { user_id } => {
-            let ws_id = ctx
-                .workspace_id
-                .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("workspace ID required"))?;
+            let ws_id = resolve_workspace(None, ctx)?;
 
             let body = serde_json::json!({
                 "organizationId": ws_id,
@@ -189,10 +172,7 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
         }
 
         WorkspaceCommand::UpdateRole { user_id, role } => {
-            let ws_id = ctx
-                .workspace_id
-                .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("workspace ID required"))?;
+            let ws_id = resolve_workspace(None, ctx)?;
 
             let body = serde_json::json!({
                 "organizationId": ws_id,
@@ -212,10 +192,7 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
         }
 
         WorkspaceCommand::Leave { id } => {
-            let ws_id = id
-                .as_deref()
-                .or(ctx.workspace_id.as_deref())
-                .ok_or_else(|| anyhow::anyhow!("workspace ID required"))?;
+            let ws_id = resolve_workspace(id.as_deref(), ctx)?;
 
             let body = serde_json::json!({ "organizationId": ws_id });
             let result: serde_json::Value = client.post("/auth/organization/leave", &body).await?;
@@ -266,10 +243,7 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
         }
 
         WorkspaceCommand::Invitations => {
-            let ws_id = ctx
-                .workspace_id
-                .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("workspace ID required"))?;
+            let ws_id = resolve_workspace(None, ctx)?;
 
             let result: serde_json::Value = client
                 .get(&format!(

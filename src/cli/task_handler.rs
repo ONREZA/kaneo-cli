@@ -1,114 +1,31 @@
-use crate::api::ApiClient;
 use crate::api::client::upload_to_presigned_url;
-use crate::api::types::{BulkUpdateResult, Column, CreateTaskBody, Project, Task};
-use crate::auth::{self, ResolvedContext};
+use crate::api::types::{BulkUpdateResult, Column, CreateTaskBody, Task};
+use crate::auth::ResolvedContext;
+use crate::cli::resolve::{inject_task_ref, parse_task_ref, resolve_project, resolve_task_id};
 use crate::cli::{TaskArgs, TaskCommand};
 use crate::output;
 use serde::Serialize;
 
+use crate::api::ApiClient;
+
 const PRIORITIES: &[&str] = &["no-priority", "low", "medium", "high", "urgent"];
 
-fn resolve_project(arg: Option<String>, ctx: &ResolvedContext) -> anyhow::Result<String> {
-    arg.or_else(|| ctx.project_id.clone())
-        .ok_or_else(|| anyhow::anyhow!("{}", auth::require_project(ctx).unwrap_err()))
+fn priority_icon(priority: &str) -> &'static str {
+    match priority {
+        "urgent" => "🔴",
+        "high" => "🟠",
+        "medium" => "🟡",
+        "low" => "🟢",
+        _ => "⚪",
+    }
 }
 
-/// Parse a human-readable task ref like "DEP-65" into (slug, number).
-fn parse_task_ref(id: &str) -> Option<(&str, i64)> {
-    let (slug, num_str) = id.rsplit_once('-')?;
-    if slug.is_empty() {
-        return None;
-    }
-    let num = num_str.parse::<i64>().ok()?;
-    Some((slug, num))
-}
-
-/// Resolve a task identifier. If it looks like "PREFIX-123", resolve it
-/// via server-side search first, then fall back to board scan.
-async fn resolve_task_id(
-    id: &str,
-    ctx: &ResolvedContext,
-    client: &ApiClient,
-) -> anyhow::Result<String> {
-    let (slug, number) = match parse_task_ref(id) {
-        Some(pair) => pair,
-        None => return Ok(id.to_string()),
-    };
-
-    let ws = auth::require_workspace(ctx)?;
-
-    // Try search API first (single call, works when search is indexed)
-    let query = format!("{slug}-{number}");
-    let search_query: Vec<(&str, &str)> = vec![
-        ("q", query.as_str()),
-        ("workspaceId", ws),
-        ("type", "tasks"),
-        ("limit", "5"),
-    ];
-    if let Ok(results) = client
-        .get_query::<serde_json::Value, _>("/search", &search_query)
-        .await
-    {
-        // Handle both response formats: { tasks: [] } and { results: [] }
-        let tasks = results
-            .get("tasks")
-            .or_else(|| results.get("results"))
-            .and_then(|v| v.as_array());
-        if let Some(tasks) = tasks {
-            for t in tasks {
-                if t.get("number").and_then(|v| v.as_i64()) == Some(number)
-                    && let Some(tid) = t.get("id").and_then(|v| v.as_str())
-                {
-                    return Ok(tid.to_string());
-                }
-            }
-        }
-    }
-
-    // Fallback: find project by slug, then scan the board
-    let projects: Vec<Project> = client.get_query("/project", &[("workspaceId", ws)]).await?;
-    let project = projects
-        .iter()
-        .find(|p| p.slug.eq_ignore_ascii_case(slug))
-        .ok_or_else(|| anyhow::anyhow!("no project with slug '{slug}' (from '{id}')"))?;
-
-    let board: serde_json::Value = client.get(&format!("/task/tasks/{}", project.id)).await?;
-
-    // Handle both formats: direct { columns, plannedTasks, ... }
-    // and wrapped { data: { columns, plannedTasks, ... }, pagination }
-    let root = board.get("data").unwrap_or(&board);
-
-    let columns = root
-        .as_array()
-        .or_else(|| root.get("columns").and_then(|v| v.as_array()));
-
-    if let Some(cols) = columns {
-        for col in cols {
-            if let Some(tasks) = col.get("tasks").and_then(|v| v.as_array()) {
-                for t in tasks {
-                    if t.get("number").and_then(|v| v.as_i64()) == Some(number)
-                        && let Some(tid) = t.get("id").and_then(|v| v.as_str())
-                    {
-                        return Ok(tid.to_string());
-                    }
-                }
-            }
-        }
-    }
-
-    for section in ["plannedTasks", "archivedTasks"] {
-        if let Some(tasks) = root.get(section).and_then(|v| v.as_array()) {
-            for t in tasks {
-                if t.get("number").and_then(|v| v.as_i64()) == Some(number)
-                    && let Some(tid) = t.get("id").and_then(|v| v.as_str())
-                {
-                    return Ok(tid.to_string());
-                }
-            }
-        }
-    }
-
-    anyhow::bail!("task {slug}-{number} not found")
+/// Output a task as JSON with ref field injected.
+async fn json_task(task: &Task, client: &ApiClient) -> anyhow::Result<()> {
+    let mut val = serde_json::to_value(task)?;
+    inject_task_ref(&mut val, &task.project_id, task.number, None, client).await;
+    output::json_output(&val);
+    Ok(())
 }
 
 pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::Result<()> {
@@ -191,34 +108,24 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
         }
 
         TaskCommand::Get { id } => {
-            let original_ref = parse_task_ref(&id);
+            let known_slug = parse_task_ref(&id).map(|(s, _)| s.to_string());
             let id = resolve_task_id(&id, ctx, &client).await?;
             let task: Task = client.get(&format!("/task/{id}")).await?;
 
-            // Compute ref
-            let slug = if let Some((s, _)) = original_ref {
-                Some(s.to_string())
-            } else {
-                client
-                    .get::<Project>(&format!("/project/{}", task.project_id))
-                    .await
-                    .ok()
-                    .map(|p| p.slug)
-            };
-            let task_ref = match (&slug, task.number) {
-                (Some(s), Some(n)) => Some(format!("{s}-{n}")),
-                _ => None,
-            };
+            let mut val = serde_json::to_value(&task)?;
+            inject_task_ref(
+                &mut val,
+                &task.project_id,
+                task.number,
+                known_slug.as_deref(),
+                &client,
+            )
+            .await;
 
             if json {
-                let mut val = serde_json::to_value(&task)?;
-                if let Some(r) = &task_ref
-                    && let Some(obj) = val.as_object_mut()
-                {
-                    obj.insert("ref".to_string(), serde_json::json!(r));
-                }
                 output::json_output(&val);
             } else {
+                let task_ref = val.get("ref").and_then(|v| v.as_str()).map(String::from);
                 print_task(&task, task_ref.as_deref());
             }
         }
@@ -243,7 +150,7 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             let task: Task = client.post(&format!("/task/{project_id}"), &body).await?;
 
             if json {
-                output::json_output(&task);
+                json_task(&task, &client).await?;
             } else {
                 output::success(
                     false,
@@ -280,7 +187,7 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 .await?;
 
             if json {
-                output::json_output(&task);
+                json_task(&task, &client).await?;
             } else {
                 output::success(false, &format!("Task '{}' → {}", task.title, task.status));
             }
@@ -306,7 +213,7 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 .await?;
 
             if json {
-                output::json_output(&task);
+                json_task(&task, &client).await?;
             } else {
                 output::success(
                     false,
@@ -332,7 +239,7 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 .await?;
 
             if json {
-                output::json_output(&task);
+                json_task(&task, &client).await?;
             } else if user_id.is_empty() {
                 output::success(false, &format!("Unassigned task '{}'", task.title));
             } else {
@@ -360,7 +267,7 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 .await?;
 
             if json {
-                output::json_output(&task);
+                json_task(&task, &client).await?;
             } else {
                 match date {
                     Some(d) => output::success(false, &format!("Task '{}' due → {d}", task.title)),
@@ -382,7 +289,7 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 .await?;
 
             if json {
-                output::json_output(&task);
+                json_task(&task, &client).await?;
             } else {
                 output::success(false, &format!("Task title → '{}'", task.title));
             }
@@ -399,7 +306,7 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 .await?;
 
             if json {
-                output::json_output(&task);
+                json_task(&task, &client).await?;
             } else {
                 output::success(false, &format!("Updated description for '{}'", task.title));
             }
@@ -410,7 +317,7 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             let task: Task = client.delete(&format!("/task/{id}")).await?;
 
             if json {
-                output::json_output(&task);
+                json_task(&task, &client).await?;
             } else {
                 output::success(false, &format!("Deleted task '{}'", task.title));
             }
@@ -557,7 +464,11 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             operation,
             value,
         } => {
-            let ids: Vec<String> = task_ids.split(',').map(|s| s.trim().to_string()).collect();
+            let raw_ids: Vec<&str> = task_ids.split(',').map(|s| s.trim()).collect();
+            let mut ids = Vec::with_capacity(raw_ids.len());
+            for raw in &raw_ids {
+                ids.push(resolve_task_id(raw, ctx, &client).await?);
+            }
             #[derive(Serialize)]
             #[serde(rename_all = "camelCase")]
             struct Body {
@@ -711,14 +622,7 @@ fn print_task_table(tasks: &[serde_json::Value]) {
         let title = t.get("title").and_then(|v| v.as_str()).unwrap_or("?");
         let status = t.get("status").and_then(|v| v.as_str()).unwrap_or("");
         let priority = t.get("priority").and_then(|v| v.as_str()).unwrap_or("");
-
-        let prio_icon = match priority {
-            "urgent" => "🔴",
-            "high" => "🟠",
-            "medium" => "🟡",
-            "low" => "🟢",
-            _ => "⚪",
-        };
+        let prio_icon = priority_icon(priority);
 
         eprintln!(
             "  {prio_icon} {} {} {} {}",
@@ -817,14 +721,7 @@ fn print_task_row(t: &serde_json::Value, cyan: &console::Style, dim: &console::S
     let id = t.get("id").and_then(|v| v.as_str()).unwrap_or("");
     let number = t.get("number").and_then(|v| v.as_i64()).unwrap_or(0);
     let priority = t.get("priority").and_then(|v| v.as_str()).unwrap_or("");
-
-    let prio_icon = match priority {
-        "urgent" => "🔴",
-        "high" => "🟠",
-        "medium" => "🟡",
-        "low" => "🟢",
-        _ => "⚪",
-    };
+    let prio_icon = priority_icon(priority);
 
     eprintln!(
         "    {prio_icon} {} {} {}",
@@ -839,13 +736,7 @@ fn print_task(task: &Task, task_ref: Option<&str>) {
     let dim = console::Style::new().dim();
     let cyan = console::Style::new().cyan();
 
-    let prio_icon = match task.priority.as_str() {
-        "urgent" => "🔴",
-        "high" => "🟠",
-        "medium" => "🟡",
-        "low" => "🟢",
-        _ => "⚪",
-    };
+    let prio_icon = priority_icon(&task.priority);
 
     let ref_label = task_ref
         .map(|r| r.to_string())
@@ -873,31 +764,5 @@ fn print_task(task: &Task, task_ref: Option<&str>) {
         && !desc.is_empty()
     {
         eprintln!("  {} {desc}", dim.apply_to("desc:"));
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parse_task_ref_valid() {
-        assert_eq!(parse_task_ref("DEP-65"), Some(("DEP", 65)));
-        assert_eq!(parse_task_ref("my-proj-1"), Some(("my-proj", 1)));
-        assert_eq!(parse_task_ref("X-0"), Some(("X", 0)));
-    }
-
-    #[test]
-    fn parse_task_ref_plain_id() {
-        assert_eq!(parse_task_ref("cvwyowgibnsfumrhdi6mxh4v"), None);
-        assert_eq!(parse_task_ref("abc123"), None);
-    }
-
-    #[test]
-    fn parse_task_ref_invalid() {
-        assert_eq!(parse_task_ref("-65"), None);
-        assert_eq!(parse_task_ref("DEP-"), None);
-        assert_eq!(parse_task_ref("DEP-abc"), None);
-        assert_eq!(parse_task_ref(""), None);
     }
 }

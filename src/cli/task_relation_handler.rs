@@ -1,6 +1,7 @@
 use crate::api::ApiClient;
 use crate::api::types::TaskRelation;
 use crate::auth::ResolvedContext;
+use crate::cli::resolve::resolve_task_id;
 use crate::cli::{TaskRelationArgs, TaskRelationCommand};
 use crate::output;
 use serde::Serialize;
@@ -10,6 +11,7 @@ pub async fn run(args: TaskRelationArgs, ctx: &ResolvedContext, json: bool) -> a
 
     match args.command {
         TaskRelationCommand::List { task_id } => {
+            let task_id = resolve_task_id(&task_id, ctx, &client).await?;
             let relations: Vec<TaskRelation> =
                 client.get(&format!("/task-relation/{task_id}")).await?;
 
@@ -45,6 +47,8 @@ pub async fn run(args: TaskRelationArgs, ctx: &ResolvedContext, json: bool) -> a
             target,
             r#type,
         } => {
+            let source = resolve_task_id(&source, ctx, &client).await?;
+            let target = resolve_task_id(&target, ctx, &client).await?;
             #[derive(Serialize)]
             #[serde(rename_all = "camelCase")]
             struct Body {

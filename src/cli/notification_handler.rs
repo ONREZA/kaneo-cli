@@ -44,11 +44,13 @@ pub async fn run(args: NotificationArgs, ctx: &ResolvedContext, json: bool) -> a
         }
 
         NotificationCommand::Read { id } => {
-            let _: Notification = client
+            let notification: Notification = client
                 .patch_empty(&format!("/notification/{id}/read"))
                 .await?;
 
-            if !json {
+            if json {
+                output::json_output(&notification);
+            } else {
                 output::success(false, "Marked as read");
             }
         }

@@ -1,14 +1,10 @@
 use crate::api::ApiClient;
 use crate::api::types::{Column, CreateColumnBody};
-use crate::auth::{self, ResolvedContext};
+use crate::auth::ResolvedContext;
+use crate::cli::resolve::resolve_project;
 use crate::cli::{ColumnArgs, ColumnCommand};
 use crate::output;
 use serde::Serialize;
-
-fn resolve_project(arg: Option<String>, ctx: &ResolvedContext) -> anyhow::Result<String> {
-    arg.or_else(|| ctx.project_id.clone())
-        .ok_or_else(|| anyhow::anyhow!("{}", auth::require_project(ctx).unwrap_err()))
-}
 
 pub async fn run(args: ColumnArgs, ctx: &ResolvedContext, json: bool) -> anyhow::Result<()> {
     let client = ApiClient::new(&ctx.api_url, &ctx.api_key)?;

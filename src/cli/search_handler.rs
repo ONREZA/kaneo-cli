@@ -10,8 +10,8 @@ pub async fn run(args: SearchArgs, ctx: &ResolvedContext, json: bool) -> anyhow:
     let mut query_params = vec![
         ("q".to_string(), args.query.clone()),
         ("workspaceId".to_string(), ws.to_string()),
-        ("type".to_string(), args.r#type.clone()),
-        ("limit".to_string(), args.limit.clone()),
+        ("type".to_string(), args.r#type.as_api_str().to_string()),
+        ("limit".to_string(), args.limit.to_string()),
     ];
 
     if let Some(pid) = &args.project_id {

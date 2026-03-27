@@ -1,6 +1,7 @@
 use crate::api::ApiClient;
 use crate::api::types::ExternalLink;
 use crate::auth::ResolvedContext;
+use crate::cli::resolve::resolve_task_id;
 use crate::cli::{ExternalLinkArgs, ExternalLinkCommand};
 use crate::output;
 
@@ -9,6 +10,7 @@ pub async fn run(args: ExternalLinkArgs, ctx: &ResolvedContext, json: bool) -> a
 
     match args.command {
         ExternalLinkCommand::Task { task_id } => {
+            let task_id = resolve_task_id(&task_id, ctx, &client).await?;
             let links: Vec<ExternalLink> = client
                 .get(&format!("/external-link/task/{task_id}"))
                 .await?;

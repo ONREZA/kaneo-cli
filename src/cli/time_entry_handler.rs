@@ -1,6 +1,7 @@
 use crate::api::ApiClient;
 use crate::api::types::TimeEntry;
 use crate::auth::ResolvedContext;
+use crate::cli::resolve::resolve_task_id;
 use crate::cli::{TimeEntryArgs, TimeEntryCommand};
 use crate::output;
 use serde::Serialize;
@@ -10,6 +11,7 @@ pub async fn run(args: TimeEntryArgs, ctx: &ResolvedContext, json: bool) -> anyh
 
     match args.command {
         TimeEntryCommand::List { task_id } => {
+            let task_id = resolve_task_id(&task_id, ctx, &client).await?;
             let entries: Vec<TimeEntry> =
                 client.get(&format!("/time-entry/task/{task_id}")).await?;
 
@@ -72,6 +74,7 @@ pub async fn run(args: TimeEntryArgs, ctx: &ResolvedContext, json: bool) -> anyh
             end,
             description,
         } => {
+            let task_id = resolve_task_id(&task_id, ctx, &client).await?;
             #[derive(Serialize)]
             #[serde(rename_all = "camelCase")]
             struct Body {
@@ -107,6 +110,7 @@ pub async fn run(args: TimeEntryArgs, ctx: &ResolvedContext, json: bool) -> anyh
             end,
             description,
         } => {
+            let current: TimeEntry = client.get(&format!("/time-entry/{id}")).await?;
             #[derive(Serialize)]
             #[serde(rename_all = "camelCase")]
             struct Body {
@@ -120,9 +124,9 @@ pub async fn run(args: TimeEntryArgs, ctx: &ResolvedContext, json: bool) -> anyh
                 .put(
                     &format!("/time-entry/{id}"),
                     &Body {
-                        start_time: start,
-                        end_time: end,
-                        description,
+                        start_time: start.unwrap_or(current.start_time),
+                        end_time: end.or(current.end_time),
+                        description: description.or(current.description),
                     },
                 )
                 .await?;

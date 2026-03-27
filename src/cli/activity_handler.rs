@@ -1,6 +1,7 @@
 use crate::api::ApiClient;
 use crate::api::types::Activity;
 use crate::auth::ResolvedContext;
+use crate::cli::resolve::resolve_task_id;
 use crate::cli::{ActivityArgs, ActivityCommand};
 use crate::output;
 use serde::Serialize;
@@ -10,6 +11,7 @@ pub async fn run(args: ActivityArgs, ctx: &ResolvedContext, json: bool) -> anyho
 
     match args.command {
         ActivityCommand::List { task_id } => {
+            let task_id = resolve_task_id(&task_id, ctx, &client).await?;
             let activities: Vec<Activity> = client.get(&format!("/activity/{task_id}")).await?;
 
             if json {
@@ -34,6 +36,7 @@ pub async fn run(args: ActivityArgs, ctx: &ResolvedContext, json: bool) -> anyho
         }
 
         ActivityCommand::Comment { task_id, comment } => {
+            let task_id = resolve_task_id(&task_id, ctx, &client).await?;
             #[derive(Serialize)]
             #[serde(rename_all = "camelCase")]
             struct Body {

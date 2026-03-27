@@ -10,6 +10,7 @@ pub mod login_handler;
 pub mod notification_handler;
 pub mod profile_handler;
 pub mod project_handler;
+pub mod resolve;
 pub mod search_handler;
 pub mod task_handler;
 pub mod task_relation_handler;
@@ -85,12 +86,15 @@ pub enum Command {
     Column(ColumnArgs),
 
     /// Manage labels
+    #[command(alias = "lbl")]
     Label(LabelArgs),
 
-    /// View task activity and comments (legacy)
+    /// View task activity and comments (legacy, use `comment` instead)
+    #[command(hide = true)]
     Activity(ActivityArgs),
 
     /// Manage task comments
+    #[command(alias = "cmt")]
     Comment(CommentArgs),
 
     /// Manage task relations
@@ -105,7 +109,7 @@ pub enum Command {
     #[command(alias = "time")]
     TimeEntry(TimeEntryArgs),
 
-    /// View external links on tasks
+    /// View external links on tasks (read-only, created by integrations)
     #[command(alias = "ext-link")]
     ExternalLink(ExternalLinkArgs),
 
@@ -114,6 +118,7 @@ pub enum Command {
     Invitation(InvitationArgs),
 
     /// Search across tasks, projects, comments
+    #[command(alias = "s")]
     Search(SearchArgs),
 
     /// Check CLI compatibility with the server's API
@@ -224,7 +229,6 @@ pub enum WorkspaceCommand {
     /// Update a workspace
     Update {
         /// Workspace ID (defaults to active)
-        #[arg(long)]
         id: Option<String>,
         #[arg(long)]
         name: Option<String>,
@@ -695,10 +699,10 @@ pub enum LabelCommand {
         id: String,
         /// New name
         #[arg(long)]
-        name: String,
-        /// New color
+        name: Option<String>,
+        /// New color (hex, e.g. #ff0000)
         #[arg(long)]
-        color: String,
+        color: Option<String>,
     },
     /// Delete a label
     #[command(alias = "rm")]
@@ -826,7 +830,8 @@ pub enum TimeEntryCommand {
         /// Time entry ID
         id: String,
         /// Start time (ISO format)
-        start: String,
+        #[arg(long)]
+        start: Option<String>,
         /// End time (ISO format)
         #[arg(long)]
         end: Option<String>,
@@ -964,18 +969,41 @@ pub enum InvitationCommand {
 
 // --- Search ---
 
+#[derive(Debug, Clone, clap::ValueEnum)]
+pub enum SearchType {
+    All,
+    Tasks,
+    Projects,
+    Workspaces,
+    Comments,
+    Activities,
+}
+
+impl SearchType {
+    pub fn as_api_str(&self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::Tasks => "tasks",
+            Self::Projects => "projects",
+            Self::Workspaces => "workspaces",
+            Self::Comments => "comments",
+            Self::Activities => "activities",
+        }
+    }
+}
+
 #[derive(Parser)]
 pub struct SearchArgs {
     /// Search query
     pub query: String,
 
-    /// Filter type: all, tasks, projects, workspaces, comments, activities
+    /// Filter type
     #[arg(long, default_value = "all")]
-    pub r#type: String,
+    pub r#type: SearchType,
 
     /// Limit results (1-50)
-    #[arg(long, default_value = "20")]
-    pub limit: String,
+    #[arg(long, default_value_t = 20)]
+    pub limit: u32,
 
     /// Filter by project ID
     #[arg(long)]
@@ -1265,8 +1293,8 @@ mod tests {
         let cli = parse(&["kaneo", "search", "login bug"]);
         if let Command::Search(args) = cli.command {
             assert_eq!(args.query, "login bug");
-            assert_eq!(args.r#type, "all");
-            assert_eq!(args.limit, "20");
+            assert!(matches!(args.r#type, SearchType::All));
+            assert_eq!(args.limit, 20);
         } else {
             panic!("expected Search");
         }

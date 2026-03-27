@@ -1,6 +1,7 @@
 use crate::api::ApiClient;
 use crate::api::types::Comment;
 use crate::auth::ResolvedContext;
+use crate::cli::resolve::resolve_task_id;
 use crate::cli::{CommentArgs, CommentCommand};
 use crate::output;
 use serde::Serialize;
@@ -10,6 +11,7 @@ pub async fn run(args: CommentArgs, ctx: &ResolvedContext, json: bool) -> anyhow
 
     match args.command {
         CommentCommand::List { task_id } => {
+            let task_id = resolve_task_id(&task_id, ctx, &client).await?;
             let comments: Vec<Comment> = client.get(&format!("/comment/{task_id}")).await?;
 
             if json {
@@ -39,6 +41,7 @@ pub async fn run(args: CommentArgs, ctx: &ResolvedContext, json: bool) -> anyhow
         }
 
         CommentCommand::Create { task_id, content } => {
+            let task_id = resolve_task_id(&task_id, ctx, &client).await?;
             #[derive(Serialize)]
             struct Body {
                 content: String,
