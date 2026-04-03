@@ -1,8 +1,5 @@
-pub mod activity_handler;
 pub mod api_check_handler;
 pub mod column_handler;
-pub mod comment_handler;
-pub mod external_link_handler;
 pub mod invitation_handler;
 pub mod label_handler;
 pub mod link_handler;
@@ -13,8 +10,6 @@ pub mod project_handler;
 pub mod resolve;
 pub mod search_handler;
 pub mod task_handler;
-pub mod task_relation_handler;
-pub mod time_entry_handler;
 pub mod whoami_handler;
 pub mod workspace_handler;
 
@@ -89,29 +84,9 @@ pub enum Command {
     #[command(alias = "lbl")]
     Label(LabelArgs),
 
-    /// View task activity and comments (legacy, use `comment` instead)
-    #[command(hide = true)]
-    Activity(ActivityArgs),
-
-    /// Manage task comments
-    #[command(alias = "cmt")]
-    Comment(CommentArgs),
-
-    /// Manage task relations
-    #[command(alias = "rel")]
-    TaskRelation(TaskRelationArgs),
-
     /// Manage notifications
     #[command(alias = "notif")]
     Notification(NotificationArgs),
-
-    /// Track time on tasks
-    #[command(alias = "time")]
-    TimeEntry(TimeEntryArgs),
-
-    /// View external links on tasks (read-only, created by integrations)
-    #[command(alias = "ext-link")]
-    ExternalLink(ExternalLinkArgs),
 
     /// View invitations
     #[command(alias = "inv")]
@@ -477,10 +452,13 @@ pub enum TaskCommand {
         #[arg(long)]
         board: bool,
     },
-    /// Get task details
+    /// Get task details (compact summary by default, --full for all sub-resources)
     Get {
         /// Task ID
         id: String,
+        /// Show full sub-resource details instead of compact summary
+        #[arg(long)]
+        full: bool,
     },
     /// Create a new task
     Create {
@@ -580,6 +558,35 @@ pub enum TaskCommand {
         #[arg(long, default_value = "description")]
         surface: String,
     },
+    /// Manage task comments
+    #[command(alias = "cmt")]
+    Comment(TaskCommentArgs),
+
+    /// Manage task labels
+    #[command(alias = "lbl")]
+    Label(TaskLabelArgs),
+
+    /// Manage task relations
+    Rel(TaskRelArgs),
+
+    /// Manage time entries
+    Time(TaskTimeArgs),
+
+    /// List external links on a task
+    Links {
+        /// Task ID
+        task_id: String,
+    },
+
+    /// Transfer a task to a different project
+    Transfer {
+        /// Task ID
+        task_id: String,
+        /// Target project ID
+        #[arg(long)]
+        project: String,
+    },
+
     /// Bulk update multiple tasks
     Bulk {
         /// Comma-separated task IDs
@@ -664,11 +671,6 @@ pub enum LabelCommand {
         /// Label ID
         id: String,
     },
-    /// List labels for a task
-    Task {
-        /// Task ID
-        task_id: String,
-    },
     /// Create a label
     Create {
         /// Label name
@@ -676,22 +678,6 @@ pub enum LabelCommand {
         /// Color (hex, e.g. #ff0000)
         #[arg(long)]
         color: String,
-        /// Optionally attach to a task
-        #[arg(long)]
-        task_id: Option<String>,
-    },
-    /// Attach a label to a task
-    Attach {
-        /// Label ID
-        id: String,
-        /// Task ID to attach the label to
-        #[arg(long)]
-        task: String,
-    },
-    /// Detach a label from its current task
-    Detach {
-        /// Label ID
-        id: String,
     },
     /// Update a label
     Update {
@@ -712,40 +698,156 @@ pub enum LabelCommand {
     },
 }
 
-// --- Activity ---
+// --- Task Comment ---
 
 #[derive(Parser)]
-pub struct ActivityArgs {
+pub struct TaskCommentArgs {
     #[command(subcommand)]
-    pub command: ActivityCommand,
+    pub command: TaskCommentCommand,
 }
 
 #[derive(Subcommand)]
-pub enum ActivityCommand {
-    /// List activities for a task
+pub enum TaskCommentCommand {
+    /// List comments on a task
     #[command(alias = "ls")]
     List {
         /// Task ID
         task_id: String,
     },
     /// Add a comment to a task
-    Comment {
+    Add {
         /// Task ID
         task_id: String,
         /// Comment text
-        comment: String,
+        text: String,
     },
     /// Edit a comment
-    EditComment {
+    Edit {
         /// Activity/comment ID
         id: String,
         /// New comment text
-        comment: String,
+        text: String,
     },
     /// Delete a comment
-    DeleteComment {
+    #[command(alias = "rm")]
+    Delete {
         /// Activity/comment ID
         id: String,
+    },
+}
+
+// --- Task Label ---
+
+#[derive(Parser)]
+pub struct TaskLabelArgs {
+    #[command(subcommand)]
+    pub command: TaskLabelCommand,
+}
+
+#[derive(Subcommand)]
+pub enum TaskLabelCommand {
+    /// List labels on a task
+    #[command(alias = "ls")]
+    List {
+        /// Task ID
+        task_id: String,
+    },
+    /// Attach a label to a task
+    Add {
+        /// Task ID
+        task_id: String,
+        /// Label ID to attach
+        label_id: String,
+    },
+    /// Detach a label from a task
+    #[command(alias = "rm")]
+    Delete {
+        /// Label ID to detach
+        label_id: String,
+    },
+}
+
+// --- Task Relation ---
+
+#[derive(Parser)]
+pub struct TaskRelArgs {
+    #[command(subcommand)]
+    pub command: TaskRelCommand,
+}
+
+#[derive(Subcommand)]
+pub enum TaskRelCommand {
+    /// List relations for a task
+    #[command(alias = "ls")]
+    List {
+        /// Task ID
+        task_id: String,
+    },
+    /// Create a relation between tasks
+    Add {
+        /// Source task ID
+        source: String,
+        /// Target task ID
+        target: String,
+        /// Relation type
+        #[arg(long, value_name = "TYPE")]
+        r#type: RelationType,
+    },
+    /// Delete a relation
+    #[command(alias = "rm")]
+    Delete {
+        /// Relation ID
+        id: String,
+    },
+}
+
+// --- Task Time ---
+
+#[derive(Parser)]
+pub struct TaskTimeArgs {
+    #[command(subcommand)]
+    pub command: TaskTimeCommand,
+}
+
+#[derive(Subcommand)]
+pub enum TaskTimeCommand {
+    /// List time entries for a task
+    #[command(alias = "ls")]
+    List {
+        /// Task ID
+        task_id: String,
+    },
+    /// Get a time entry
+    Get {
+        /// Time entry ID
+        id: String,
+    },
+    /// Create a time entry
+    Add {
+        /// Task ID
+        task_id: String,
+        /// Start time (ISO format)
+        start: String,
+        /// End time (ISO format, optional for running entries)
+        #[arg(long)]
+        end: Option<String>,
+        /// Description
+        #[arg(long)]
+        description: Option<String>,
+    },
+    /// Update a time entry
+    Edit {
+        /// Time entry ID
+        id: String,
+        /// Start time (ISO format)
+        #[arg(long)]
+        start: Option<String>,
+        /// End time (ISO format)
+        #[arg(long)]
+        end: Option<String>,
+        /// Description
+        #[arg(long)]
+        description: Option<String>,
     },
 }
 
@@ -791,95 +893,7 @@ pub enum NotificationCommand {
     },
 }
 
-// --- Time Entry ---
-
-#[derive(Parser)]
-pub struct TimeEntryArgs {
-    #[command(subcommand)]
-    pub command: TimeEntryCommand,
-}
-
-#[derive(Subcommand)]
-pub enum TimeEntryCommand {
-    /// List time entries for a task
-    #[command(alias = "ls")]
-    List {
-        /// Task ID
-        task_id: String,
-    },
-    /// Get a time entry
-    Get {
-        /// Time entry ID
-        id: String,
-    },
-    /// Create a time entry
-    Create {
-        /// Task ID
-        task_id: String,
-        /// Start time (ISO format)
-        start: String,
-        /// End time (ISO format, optional for running entries)
-        #[arg(long)]
-        end: Option<String>,
-        /// Description
-        #[arg(long)]
-        description: Option<String>,
-    },
-    /// Update a time entry
-    Update {
-        /// Time entry ID
-        id: String,
-        /// Start time (ISO format)
-        #[arg(long)]
-        start: Option<String>,
-        /// End time (ISO format)
-        #[arg(long)]
-        end: Option<String>,
-        /// Description
-        #[arg(long)]
-        description: Option<String>,
-    },
-}
-
-// --- Comment (first-class) ---
-
-#[derive(Parser)]
-pub struct CommentArgs {
-    #[command(subcommand)]
-    pub command: CommentCommand,
-}
-
-#[derive(Subcommand)]
-pub enum CommentCommand {
-    /// List comments on a task
-    #[command(alias = "ls")]
-    List {
-        /// Task ID
-        task_id: String,
-    },
-    /// Add a comment to a task
-    Create {
-        /// Task ID
-        task_id: String,
-        /// Comment text
-        content: String,
-    },
-    /// Edit a comment
-    Update {
-        /// Comment ID
-        id: String,
-        /// New comment text
-        content: String,
-    },
-    /// Delete a comment
-    #[command(alias = "rm")]
-    Delete {
-        /// Comment ID
-        id: String,
-    },
-}
-
-// --- Task Relation ---
+// --- Relation Type ---
 
 #[derive(Debug, Clone, clap::ValueEnum)]
 pub enum RelationType {
@@ -896,56 +910,6 @@ impl RelationType {
             Self::Related => "related",
         }
     }
-}
-
-#[derive(Parser)]
-pub struct TaskRelationArgs {
-    #[command(subcommand)]
-    pub command: TaskRelationCommand,
-}
-
-#[derive(Subcommand)]
-pub enum TaskRelationCommand {
-    /// List relations for a task
-    #[command(alias = "ls")]
-    List {
-        /// Task ID
-        task_id: String,
-    },
-    /// Create a relation between tasks
-    Create {
-        /// Source task ID
-        source: String,
-        /// Target task ID
-        target: String,
-        /// Relation type
-        #[arg(long, value_name = "TYPE")]
-        r#type: RelationType,
-    },
-    /// Delete a relation
-    #[command(alias = "rm")]
-    Delete {
-        /// Relation ID
-        id: String,
-    },
-}
-
-// --- External Link ---
-
-#[derive(Parser)]
-pub struct ExternalLinkArgs {
-    #[command(subcommand)]
-    pub command: ExternalLinkCommand,
-}
-
-#[derive(Subcommand)]
-pub enum ExternalLinkCommand {
-    /// List external links for a task
-    #[command(alias = "ls")]
-    Task {
-        /// Task ID
-        task_id: String,
-    },
 }
 
 // --- Invitation ---
@@ -1235,30 +1199,138 @@ mod tests {
         }
     }
 
-    // --- Label commands ---
+    // --- Task comment subcommands ---
 
     #[test]
-    fn label_attach() {
-        let cli = parse(&["kaneo", "label", "attach", "label-1", "--task", "task-1"]);
-        if let Command::Label(args) = cli.command {
-            if let LabelCommand::Attach { id, task } = args.command {
-                assert_eq!(id, "label-1");
-                assert_eq!(task, "task-1");
+    fn task_comment_add() {
+        let cli = parse(&["kaneo", "t", "comment", "add", "DEP-1", "hello"]);
+        if let Command::Task(args) = cli.command {
+            if let TaskCommand::Comment(cargs) = args.command {
+                if let TaskCommentCommand::Add { task_id, text } = cargs.command {
+                    assert_eq!(task_id, "DEP-1");
+                    assert_eq!(text, "hello");
+                } else {
+                    panic!("expected Add");
+                }
             } else {
-                panic!("expected Attach");
+                panic!("expected Comment");
             }
         } else {
-            panic!("expected Label");
+            panic!("expected Task");
         }
     }
 
     #[test]
-    fn label_detach() {
-        let cli = parse(&["kaneo", "label", "detach", "label-1"]);
-        if let Command::Label(args) = cli.command {
-            assert!(matches!(args.command, LabelCommand::Detach { .. }));
+    fn task_comment_alias_cmt() {
+        let cli = parse(&["kaneo", "t", "cmt", "ls", "DEP-1"]);
+        if let Command::Task(args) = cli.command {
+            assert!(matches!(args.command, TaskCommand::Comment(_)));
         } else {
-            panic!("expected Label");
+            panic!("expected Task");
+        }
+    }
+
+    // --- Task label subcommands ---
+
+    #[test]
+    fn task_label_add() {
+        let cli = parse(&["kaneo", "t", "label", "add", "DEP-1", "label-1"]);
+        if let Command::Task(args) = cli.command {
+            if let TaskCommand::Label(largs) = args.command {
+                if let TaskLabelCommand::Add { task_id, label_id } = largs.command {
+                    assert_eq!(task_id, "DEP-1");
+                    assert_eq!(label_id, "label-1");
+                } else {
+                    panic!("expected Add");
+                }
+            } else {
+                panic!("expected Label");
+            }
+        } else {
+            panic!("expected Task");
+        }
+    }
+
+    // --- Task transfer ---
+
+    #[test]
+    fn task_transfer() {
+        let cli = parse(&["kaneo", "t", "transfer", "DEP-1", "--project", "proj-2"]);
+        if let Command::Task(args) = cli.command {
+            if let TaskCommand::Transfer { task_id, project } = args.command {
+                assert_eq!(task_id, "DEP-1");
+                assert_eq!(project, "proj-2");
+            } else {
+                panic!("expected Transfer");
+            }
+        } else {
+            panic!("expected Task");
+        }
+    }
+
+    // --- Task rel subcommands ---
+
+    #[test]
+    fn task_rel_add() {
+        let cli = parse(&[
+            "kaneo", "t", "rel", "add", "src-1", "tgt-1", "--type", "subtask",
+        ]);
+        if let Command::Task(args) = cli.command {
+            if let TaskCommand::Rel(rargs) = args.command {
+                if let TaskRelCommand::Add {
+                    source,
+                    target,
+                    r#type,
+                } = rargs.command
+                {
+                    assert_eq!(source, "src-1");
+                    assert_eq!(target, "tgt-1");
+                    assert!(matches!(r#type, RelationType::Subtask));
+                } else {
+                    panic!("expected Add");
+                }
+            } else {
+                panic!("expected Rel");
+            }
+        } else {
+            panic!("expected Task");
+        }
+    }
+
+    // --- Task time subcommands ---
+
+    #[test]
+    fn task_time_add() {
+        let cli = parse(&[
+            "kaneo",
+            "t",
+            "time",
+            "add",
+            "DEP-1",
+            "2026-01-01T09:00:00Z",
+            "--end",
+            "2026-01-01T11:00:00Z",
+        ]);
+        if let Command::Task(args) = cli.command {
+            if let TaskCommand::Time(targs) = args.command {
+                if let TaskTimeCommand::Add {
+                    task_id,
+                    start,
+                    end,
+                    ..
+                } = targs.command
+                {
+                    assert_eq!(task_id, "DEP-1");
+                    assert_eq!(start, "2026-01-01T09:00:00Z");
+                    assert_eq!(end.as_deref(), Some("2026-01-01T11:00:00Z"));
+                } else {
+                    panic!("expected Add");
+                }
+            } else {
+                panic!("expected Time");
+            }
+        } else {
+            panic!("expected Task");
         }
     }
 
@@ -1429,26 +1501,6 @@ mod tests {
     }
 
     #[test]
-    fn external_link_alias() {
-        let cli = parse(&["kaneo", "ext-link", "ls", "task-1"]);
-        assert!(matches!(cli.command, Command::ExternalLink(_)));
-    }
-
-    #[test]
-    fn external_link_task() {
-        let cli = parse(&["kaneo", "external-link", "task", "task-1"]);
-        if let Command::ExternalLink(args) = cli.command {
-            if let ExternalLinkCommand::Task { task_id } = args.command {
-                assert_eq!(task_id, "task-1");
-            } else {
-                panic!("expected Task");
-            }
-        } else {
-            panic!("expected ExternalLink");
-        }
-    }
-
-    #[test]
     fn invitation_alias() {
         let cli = parse(&["kaneo", "inv", "pending"]);
         assert!(matches!(cli.command, Command::Invitation(_)));
@@ -1588,113 +1640,10 @@ mod tests {
         assert_eq!(BulkOperation::UpdateDueDate.as_api_str(), "updateDueDate");
     }
 
-    // --- Task Relations ---
-
-    #[test]
-    fn task_relation_alias() {
-        let cli = parse(&["kaneo", "rel", "ls", "task-1"]);
-        assert!(matches!(cli.command, Command::TaskRelation(_)));
-    }
-
-    #[test]
-    fn task_relation_create() {
-        let cli = parse(&[
-            "kaneo",
-            "task-relation",
-            "create",
-            "src-1",
-            "tgt-1",
-            "--type",
-            "subtask",
-        ]);
-        if let Command::TaskRelation(args) = cli.command {
-            if let TaskRelationCommand::Create {
-                source,
-                target,
-                r#type,
-            } = args.command
-            {
-                assert_eq!(source, "src-1");
-                assert_eq!(target, "tgt-1");
-                assert!(matches!(r#type, RelationType::Subtask));
-            } else {
-                panic!("expected Create");
-            }
-        } else {
-            panic!("expected TaskRelation");
-        }
-    }
-
-    #[test]
-    fn task_relation_delete() {
-        let cli = parse(&["kaneo", "rel", "rm", "rel-1"]);
-        if let Command::TaskRelation(args) = cli.command {
-            assert!(matches!(args.command, TaskRelationCommand::Delete { .. }));
-        } else {
-            panic!("expected TaskRelation");
-        }
-    }
-
     #[test]
     fn relation_type_api_str() {
         assert_eq!(RelationType::Subtask.as_api_str(), "subtask");
         assert_eq!(RelationType::Blocks.as_api_str(), "blocks");
         assert_eq!(RelationType::Related.as_api_str(), "related");
-    }
-
-    // --- Comments (first-class) ---
-
-    #[test]
-    fn comment_list() {
-        let cli = parse(&["kaneo", "comment", "ls", "task-1"]);
-        if let Command::Comment(args) = cli.command {
-            if let CommentCommand::List { task_id } = args.command {
-                assert_eq!(task_id, "task-1");
-            } else {
-                panic!("expected List");
-            }
-        } else {
-            panic!("expected Comment");
-        }
-    }
-
-    #[test]
-    fn comment_create() {
-        let cli = parse(&["kaneo", "comment", "create", "task-1", "Hello world"]);
-        if let Command::Comment(args) = cli.command {
-            if let CommentCommand::Create { task_id, content } = args.command {
-                assert_eq!(task_id, "task-1");
-                assert_eq!(content, "Hello world");
-            } else {
-                panic!("expected Create");
-            }
-        } else {
-            panic!("expected Comment");
-        }
-    }
-
-    #[test]
-    fn comment_update() {
-        let cli = parse(&["kaneo", "comment", "update", "c-1", "Updated text"]);
-        if let Command::Comment(args) = cli.command {
-            if let CommentCommand::Update { id, content } = args.command {
-                assert_eq!(id, "c-1");
-                assert_eq!(content, "Updated text");
-            } else {
-                panic!("expected Update");
-            }
-        } else {
-            panic!("expected Comment");
-        }
-    }
-
-    #[test]
-    fn comment_delete() {
-        let cli = parse(&["kaneo", "comment", "rm", "c-1"]);
-        if let Command::Comment(args) = cli.command {
-            assert!(matches!(args.command, CommentCommand::Delete { .. }));
-        } else {
-            panic!("expected Comment");
-        }
     }
 }

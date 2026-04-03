@@ -52,6 +52,7 @@ pub const TASK_IMPORT: (&str, &str) = ("POST", "/task/import/{projectId}");
 pub const TASK_IMAGE_UPLOAD: (&str, &str) = ("PUT", "/task/image-upload/{id}");
 pub const TASK_IMAGE_UPLOAD_FINALIZE: (&str, &str) = ("POST", "/task/image-upload/{id}/finalize");
 pub const TASK_BULK: (&str, &str) = ("PATCH", "/task/bulk");
+pub const TASK_MOVE: (&str, &str) = ("PUT", "/task/move/{id}");
 
 // --- Column ---
 pub const COLUMN_LIST: (&str, &str) = ("GET", "/column/{projectId}");
@@ -162,6 +163,7 @@ pub const ALL_ROUTES: &[(&str, &str)] = &[
     TASK_IMAGE_UPLOAD,
     TASK_IMAGE_UPLOAD_FINALIZE,
     TASK_BULK,
+    TASK_MOVE,
     COLUMN_LIST,
     COLUMN_CREATE,
     COLUMN_UPDATE,

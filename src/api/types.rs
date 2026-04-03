@@ -52,6 +52,12 @@ pub struct Task {
     pub priority: String,
     pub due_date: Option<String>,
     pub created_at: String,
+    #[serde(default)]
+    pub start_date: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+    #[serde(default)]
+    pub column_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -272,28 +278,6 @@ pub struct ServerConfig {
     pub has_guest_access: Option<bool>,
 }
 
-// --- Comment (first-class) ---
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Comment {
-    pub id: String,
-    pub task_id: String,
-    pub user_id: String,
-    pub content: String,
-    pub created_at: String,
-    pub updated_at: String,
-    #[serde(default)]
-    pub user: Option<CommentUser>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommentUser {
-    pub name: String,
-    #[serde(default)]
-    pub image: Option<String>,
-}
-
 // --- Task Relation ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -402,6 +386,28 @@ mod tests {
         assert!(task.description.is_none());
         assert!(task.user_id.is_none());
         assert!(task.due_date.is_none());
+        assert!(task.start_date.is_none());
+        assert!(task.updated_at.is_none());
+        assert!(task.column_id.is_none());
+    }
+
+    #[test]
+    fn task_deserialize_new_fields() {
+        let json = r#"{
+            "id": "abc",
+            "projectId": "proj-1",
+            "title": "T",
+            "status": "todo",
+            "priority": "low",
+            "createdAt": "2026-01-01",
+            "startDate": "2026-01-02",
+            "updatedAt": "2026-01-03T10:00:00Z",
+            "columnId": "col-1"
+        }"#;
+        let task: Task = serde_json::from_str(json).unwrap();
+        assert_eq!(task.start_date.as_deref(), Some("2026-01-02"));
+        assert_eq!(task.updated_at.as_deref(), Some("2026-01-03T10:00:00Z"));
+        assert_eq!(task.column_id.as_deref(), Some("col-1"));
     }
 
     #[test]
@@ -418,12 +424,16 @@ mod tests {
             priority: "low".into(),
             due_date: Some("2026-12-31".into()),
             created_at: "2026-01-01".into(),
+            start_date: None,
+            updated_at: Some("2026-01-02".into()),
+            column_id: None,
         };
         let json = serde_json::to_string(&task).unwrap();
         let restored: Task = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.id, task.id);
         assert_eq!(restored.title, task.title);
         assert_eq!(restored.user_id, task.user_id);
+        assert_eq!(restored.updated_at, task.updated_at);
     }
 
     #[test]
@@ -662,23 +672,6 @@ mod tests {
         assert_eq!(member.name, "Alice");
         assert_eq!(member.role, "admin");
         assert!(member.image.is_none());
-    }
-
-    #[test]
-    fn comment_deserialize() {
-        let json = r#"{
-            "id": "c1",
-            "taskId": "t1",
-            "userId": "u1",
-            "content": "Hello",
-            "createdAt": "2026-01-01",
-            "updatedAt": "2026-01-02",
-            "user": {"name": "Alice", "image": null}
-        }"#;
-        let comment: Comment = serde_json::from_str(json).unwrap();
-        assert_eq!(comment.content, "Hello");
-        assert!(comment.user.is_some());
-        assert_eq!(comment.user.unwrap().name, "Alice");
     }
 
     #[test]

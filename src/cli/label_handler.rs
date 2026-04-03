@@ -1,10 +1,8 @@
 use crate::api::ApiClient;
 use crate::api::types::{CreateLabelBody, Label};
 use crate::auth::{self, ResolvedContext};
-use crate::cli::resolve::resolve_task_id;
 use crate::cli::{LabelArgs, LabelCommand};
 use crate::output;
-use serde::Serialize;
 
 pub async fn run(args: LabelArgs, ctx: &ResolvedContext, json: bool) -> anyhow::Result<()> {
     let client = ApiClient::new(&ctx.api_url, &ctx.api_key)?;
@@ -54,39 +52,13 @@ pub async fn run(args: LabelArgs, ctx: &ResolvedContext, json: bool) -> anyhow::
             }
         }
 
-        LabelCommand::Task { task_id } => {
-            let task_id = resolve_task_id(&task_id, ctx, &client).await?;
-            let labels: Vec<Label> = client.get(&format!("/label/task/{task_id}")).await?;
-
-            if json {
-                output::json_output(&labels);
-            } else {
-                if labels.is_empty() {
-                    output::warn(false, "No labels on this task");
-                    return Ok(());
-                }
-                for l in &labels {
-                    let dim = console::Style::new().dim();
-                    eprintln!("  ● {} {}", l.name, dim.apply_to(&l.color));
-                }
-            }
-        }
-
-        LabelCommand::Create {
-            name,
-            color,
-            task_id,
-        } => {
+        LabelCommand::Create { name, color } => {
             let ws = auth::require_workspace(ctx)?;
-            let resolved_task_id = match task_id {
-                Some(tid) => Some(resolve_task_id(&tid, ctx, &client).await?),
-                None => None,
-            };
             let body = CreateLabelBody {
                 name: name.clone(),
                 color,
                 workspace_id: ws.to_string(),
-                task_id: resolved_task_id,
+                task_id: None,
             };
             let label: Label = client.post("/label", &body).await?;
 
@@ -100,37 +72,9 @@ pub async fn run(args: LabelArgs, ctx: &ResolvedContext, json: bool) -> anyhow::
             }
         }
 
-        LabelCommand::Attach { id, task } => {
-            let task = resolve_task_id(&task, ctx, &client).await?;
-            #[derive(Serialize)]
-            #[serde(rename_all = "camelCase")]
-            struct Body {
-                task_id: String,
-            }
-            let label: Label = client
-                .put(&format!("/label/{id}/task"), &Body { task_id: task })
-                .await?;
-
-            if json {
-                output::json_output(&label);
-            } else {
-                output::success(false, &format!("Attached label '{}' to task", label.name));
-            }
-        }
-
-        LabelCommand::Detach { id } => {
-            let label: Label = client.delete(&format!("/label/{id}/task")).await?;
-
-            if json {
-                output::json_output(&label);
-            } else {
-                output::success(false, &format!("Detached label '{}' from task", label.name));
-            }
-        }
-
         LabelCommand::Update { id, name, color } => {
             let current: Label = client.get(&format!("/label/{id}")).await?;
-            #[derive(Serialize)]
+            #[derive(serde::Serialize)]
             struct Body {
                 name: String,
                 color: String,

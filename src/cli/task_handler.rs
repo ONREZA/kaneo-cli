@@ -1,10 +1,15 @@
 use crate::api::client::upload_to_presigned_url;
-use crate::api::types::{BulkUpdateResult, Column, CreateTaskBody, Task};
+use crate::api::types::{
+    Activity, BulkUpdateResult, Column, CreateTaskBody, ExternalLink, Label, Task, TaskRelation,
+    TimeEntry,
+};
 use crate::auth::ResolvedContext;
 use crate::cli::resolve::{
     inject_task_ref, parse_task_ref, resolve_project, resolve_task_id, validate_status,
 };
-use crate::cli::{TaskArgs, TaskCommand};
+use crate::cli::{
+    TaskArgs, TaskCommand, TaskCommentCommand, TaskLabelCommand, TaskRelCommand, TaskTimeCommand,
+};
 use crate::output;
 use serde::Serialize;
 
@@ -19,6 +24,16 @@ fn priority_icon(priority: &str) -> &'static str {
         "medium" => "🟡",
         "low" => "🟢",
         _ => "⚪",
+    }
+}
+
+fn unwrap_or_warn<T: Default>(result: anyhow::Result<T>, resource: &str, json: bool) -> T {
+    match result {
+        Ok(v) => v,
+        Err(e) => {
+            output::warn(json, &format!("Could not load {resource}: {e:#}"));
+            T::default()
+        }
     }
 }
 
@@ -113,10 +128,34 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             }
         }
 
-        TaskCommand::Get { id } => {
+        TaskCommand::Get { id, full } => {
             let known_slug = parse_task_ref(&id).map(|(s, _)| s.to_string());
             let id = resolve_task_id(&id, ctx, &client).await?;
-            let task: Task = client.get(&format!("/task/{id}")).await?;
+
+            // Parallel fetch: task + all sub-resources
+            let task_path = format!("/task/{id}");
+            let activity_path = format!("/activity/{id}");
+            let label_path = format!("/label/task/{id}");
+            let relation_path = format!("/task-relation/{id}");
+            let time_path = format!("/time-entry/task/{id}");
+            let link_path = format!("/external-link/task/{id}");
+
+            let (task_res, activities_res, labels_res, rels_res, time_res, links_res) = tokio::join!(
+                client.get::<Task>(&task_path),
+                client.get::<Vec<Activity>>(&activity_path),
+                client.get::<Vec<Label>>(&label_path),
+                client.get::<Vec<TaskRelation>>(&relation_path),
+                client.get::<Vec<TimeEntry>>(&time_path),
+                client.get::<Vec<ExternalLink>>(&link_path),
+            );
+
+            let task = task_res?;
+            let mut comments = unwrap_or_warn(activities_res, "comments", json);
+            comments.retain(|a| a.r#type == "comment");
+            let labels = unwrap_or_warn(labels_res, "labels", json);
+            let relations = unwrap_or_warn(rels_res, "relations", json);
+            let time_entries = unwrap_or_warn(time_res, "time entries", json);
+            let ext_links = unwrap_or_warn(links_res, "external links", json);
 
             let mut val = serde_json::to_value(&task)?;
             inject_task_ref(
@@ -127,12 +166,82 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 &client,
             )
             .await;
+            let task_ref = val.get("ref").and_then(|v| v.as_str()).map(String::from);
 
-            if json {
-                output::json_output(&val);
+            if full {
+                // --full: include complete sub-resource objects
+                if let Some(obj) = val.as_object_mut() {
+                    obj.insert("comments".to_string(), serde_json::to_value(&comments)?);
+                    obj.insert("labels".to_string(), serde_json::to_value(&labels)?);
+                    obj.insert("relations".to_string(), serde_json::to_value(&relations)?);
+                    obj.insert(
+                        "timeEntries".to_string(),
+                        serde_json::to_value(&time_entries)?,
+                    );
+                    obj.insert(
+                        "externalLinks".to_string(),
+                        serde_json::to_value(&ext_links)?,
+                    );
+                }
+
+                if json {
+                    output::json_output(&val);
+                } else {
+                    print_task_full(
+                        &task,
+                        task_ref.as_deref(),
+                        &comments,
+                        &labels,
+                        &relations,
+                        &time_entries,
+                        &ext_links,
+                    );
+                }
             } else {
-                let task_ref = val.get("ref").and_then(|v| v.as_str()).map(String::from);
-                print_task(&task, task_ref.as_deref());
+                // Compact: counts + label names + drill hints
+                let ref_label = task_ref.as_deref().unwrap_or(&id);
+                let time_total: i64 = time_entries.iter().filter_map(|e| e.duration).sum();
+
+                if let Some(obj) = val.as_object_mut() {
+                    obj.insert(
+                        "commentCount".to_string(),
+                        serde_json::json!(comments.len()),
+                    );
+                    obj.insert(
+                        "labels".to_string(),
+                        serde_json::json!(labels.iter().map(|l| &l.name).collect::<Vec<_>>()),
+                    );
+                    obj.insert(
+                        "relationCount".to_string(),
+                        serde_json::json!(relations.len()),
+                    );
+                    obj.insert("timeTotal".to_string(), serde_json::json!(time_total));
+                    obj.insert("linkCount".to_string(), serde_json::json!(ext_links.len()));
+                    obj.insert(
+                        "_drill".to_string(),
+                        serde_json::json!({
+                            "comments": format!("kaneo t comment ls {ref_label}"),
+                            "labels": format!("kaneo t label ls {ref_label}"),
+                            "relations": format!("kaneo t rel ls {ref_label}"),
+                            "time": format!("kaneo t time ls {ref_label}"),
+                            "links": format!("kaneo t links {ref_label}"),
+                        }),
+                    );
+                }
+
+                if json {
+                    output::json_output(&val);
+                } else {
+                    print_task_compact(
+                        &task,
+                        task_ref.as_deref(),
+                        &comments,
+                        &labels,
+                        &relations,
+                        &time_entries,
+                        &ext_links,
+                    );
+                }
             }
         }
 
@@ -539,9 +648,577 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 );
             }
         }
+
+        // --- Comment subcommands (via activity endpoints for web UI compatibility) ---
+        TaskCommand::Comment(args) => match args.command {
+            TaskCommentCommand::List { task_id } => {
+                let task_id = resolve_task_id(&task_id, ctx, &client).await?;
+                let mut activities: Vec<Activity> =
+                    client.get(&format!("/activity/{task_id}")).await?;
+                activities.retain(|a| a.r#type == "comment");
+
+                if json {
+                    output::json_output(&activities);
+                } else {
+                    if activities.is_empty() {
+                        output::warn(false, "No comments on this task");
+                        return Ok(());
+                    }
+                    let bold = console::Style::new().bold();
+                    let dim = console::Style::new().dim();
+                    for a in &activities {
+                        let author = a
+                            .external_user_name
+                            .as_deref()
+                            .or(a.user_id.as_deref())
+                            .unwrap_or("unknown");
+                        eprintln!(
+                            "  {} {} {}",
+                            bold.apply_to(author),
+                            dim.apply_to(&a.created_at),
+                            dim.apply_to(&a.id),
+                        );
+                        eprintln!("    {}", a.content.as_deref().unwrap_or(""));
+                    }
+                }
+            }
+            TaskCommentCommand::Add { task_id, text } => {
+                let task_id = resolve_task_id(&task_id, ctx, &client).await?;
+                #[derive(Serialize)]
+                #[serde(rename_all = "camelCase")]
+                struct Body {
+                    task_id: String,
+                    comment: String,
+                }
+                let activity: Activity = client
+                    .post(
+                        "/activity/comment",
+                        &Body {
+                            task_id,
+                            comment: text,
+                        },
+                    )
+                    .await?;
+
+                if json {
+                    output::json_output(&activity);
+                } else {
+                    output::success(false, &format!("Comment added ({})", activity.id));
+                }
+            }
+            TaskCommentCommand::Edit { id, text } => {
+                #[derive(Serialize)]
+                #[serde(rename_all = "camelCase")]
+                struct Body {
+                    activity_id: String,
+                    comment: String,
+                }
+                let activity: Activity = client
+                    .put(
+                        "/activity/comment",
+                        &Body {
+                            activity_id: id,
+                            comment: text,
+                        },
+                    )
+                    .await?;
+
+                if json {
+                    output::json_output(&activity);
+                } else {
+                    output::success(false, &format!("Comment updated ({})", activity.id));
+                }
+            }
+            TaskCommentCommand::Delete { id } => {
+                #[derive(Serialize)]
+                #[serde(rename_all = "camelCase")]
+                struct Body {
+                    activity_id: String,
+                }
+                let activity: Activity = client
+                    .delete_json("/activity/comment", &Body { activity_id: id })
+                    .await?;
+
+                if json {
+                    output::json_output(&activity);
+                } else {
+                    output::success(false, &format!("Comment deleted ({})", activity.id));
+                }
+            }
+        },
+
+        // --- Label subcommands (task-scoped: attach/detach/list) ---
+        TaskCommand::Label(args) => match args.command {
+            TaskLabelCommand::List { task_id } => {
+                let task_id = resolve_task_id(&task_id, ctx, &client).await?;
+                let labels: Vec<Label> = client.get(&format!("/label/task/{task_id}")).await?;
+
+                if json {
+                    output::json_output(&labels);
+                } else {
+                    if labels.is_empty() {
+                        output::warn(false, "No labels on this task");
+                        return Ok(());
+                    }
+                    let dim = console::Style::new().dim();
+                    for l in &labels {
+                        eprintln!("  ● {} {}", l.name, dim.apply_to(&l.color));
+                    }
+                }
+            }
+            TaskLabelCommand::Add { task_id, label_id } => {
+                let task_id = resolve_task_id(&task_id, ctx, &client).await?;
+                #[derive(Serialize)]
+                #[serde(rename_all = "camelCase")]
+                struct Body {
+                    task_id: String,
+                }
+                let label: Label = client
+                    .put(&format!("/label/{label_id}/task"), &Body { task_id })
+                    .await?;
+
+                if json {
+                    output::json_output(&label);
+                } else {
+                    output::success(false, &format!("Attached label '{}' to task", label.name));
+                }
+            }
+            TaskLabelCommand::Delete { label_id } => {
+                let label: Label = client.delete(&format!("/label/{label_id}/task")).await?;
+
+                if json {
+                    output::json_output(&label);
+                } else {
+                    output::success(false, &format!("Detached label '{}' from task", label.name));
+                }
+            }
+        },
+
+        // --- Relation subcommands ---
+        TaskCommand::Rel(args) => match args.command {
+            TaskRelCommand::List { task_id } => {
+                let task_id = resolve_task_id(&task_id, ctx, &client).await?;
+                let relations: Vec<TaskRelation> =
+                    client.get(&format!("/task-relation/{task_id}")).await?;
+
+                if json {
+                    output::json_output(&relations);
+                } else {
+                    if relations.is_empty() {
+                        output::warn(false, "No relations on this task");
+                        return Ok(());
+                    }
+                    let dim = console::Style::new().dim();
+                    for r in &relations {
+                        let icon = match r.relation_type.as_str() {
+                            "subtask" => "⊂",
+                            "blocks" => "⊳",
+                            _ => "↔",
+                        };
+                        eprintln!(
+                            "  {} {} {} → {} {}",
+                            icon,
+                            r.relation_type,
+                            r.source_task_id,
+                            r.target_task_id,
+                            dim.apply_to(&r.id),
+                        );
+                    }
+                }
+            }
+            TaskRelCommand::Add {
+                source,
+                target,
+                r#type,
+            } => {
+                let source = resolve_task_id(&source, ctx, &client).await?;
+                let target = resolve_task_id(&target, ctx, &client).await?;
+                #[derive(Serialize)]
+                #[serde(rename_all = "camelCase")]
+                struct Body {
+                    source_task_id: String,
+                    target_task_id: String,
+                    relation_type: String,
+                }
+                let rel: TaskRelation = client
+                    .post(
+                        "/task-relation",
+                        &Body {
+                            source_task_id: source,
+                            target_task_id: target,
+                            relation_type: r#type.as_api_str().to_string(),
+                        },
+                    )
+                    .await?;
+
+                if json {
+                    output::json_output(&rel);
+                } else {
+                    output::success(
+                        false,
+                        &format!("Created {} relation ({})", rel.relation_type, rel.id),
+                    );
+                }
+            }
+            TaskRelCommand::Delete { id } => {
+                let rel: TaskRelation = client.delete(&format!("/task-relation/{id}")).await?;
+
+                if json {
+                    output::json_output(&rel);
+                } else {
+                    output::success(false, &format!("Deleted relation ({})", rel.id));
+                }
+            }
+        },
+
+        // --- Time entry subcommands ---
+        TaskCommand::Time(args) => match args.command {
+            TaskTimeCommand::List { task_id } => {
+                let task_id = resolve_task_id(&task_id, ctx, &client).await?;
+                let entries: Vec<TimeEntry> =
+                    client.get(&format!("/time-entry/task/{task_id}")).await?;
+
+                if json {
+                    output::json_output(&entries);
+                } else {
+                    if entries.is_empty() {
+                        output::warn(false, "No time entries for this task");
+                        return Ok(());
+                    }
+                    let dim = console::Style::new().dim();
+                    for e in &entries {
+                        let dur = format_duration(e.duration.unwrap_or(0));
+                        eprintln!(
+                            "  {} {} {}",
+                            dur,
+                            dim.apply_to(&e.start_time),
+                            dim.apply_to(&e.id),
+                        );
+                    }
+                }
+            }
+            TaskTimeCommand::Get { id } => {
+                let entry: TimeEntry = client.get(&format!("/time-entry/{id}")).await?;
+
+                if json {
+                    output::json_output(&entry);
+                } else {
+                    let dim = console::Style::new().dim();
+                    eprintln!("  {} {}", dim.apply_to("id:"), entry.id);
+                    eprintln!("  {} {}", dim.apply_to("task:"), entry.task_id);
+                    eprintln!("  {} {}", dim.apply_to("start:"), entry.start_time);
+                    if let Some(end) = &entry.end_time {
+                        eprintln!("  {} {end}", dim.apply_to("end:"));
+                    }
+                    if let Some(dur) = entry.duration {
+                        eprintln!("  {} {}", dim.apply_to("duration:"), format_duration(dur));
+                    }
+                    if let Some(desc) = &entry.description {
+                        eprintln!("  {} {desc}", dim.apply_to("desc:"));
+                    }
+                }
+            }
+            TaskTimeCommand::Add {
+                task_id,
+                start,
+                end,
+                description,
+            } => {
+                let task_id = resolve_task_id(&task_id, ctx, &client).await?;
+                #[derive(Serialize)]
+                #[serde(rename_all = "camelCase")]
+                struct Body {
+                    task_id: String,
+                    start_time: String,
+                    #[serde(skip_serializing_if = "Option::is_none")]
+                    end_time: Option<String>,
+                    #[serde(skip_serializing_if = "Option::is_none")]
+                    description: Option<String>,
+                }
+                let entry: TimeEntry = client
+                    .post(
+                        "/time-entry",
+                        &Body {
+                            task_id,
+                            start_time: start,
+                            end_time: end,
+                            description,
+                        },
+                    )
+                    .await?;
+
+                if json {
+                    output::json_output(&entry);
+                } else {
+                    output::success(false, &format!("Time entry created ({})", entry.id));
+                }
+            }
+            TaskTimeCommand::Edit {
+                id,
+                start,
+                end,
+                description,
+            } => {
+                let current: TimeEntry = client.get(&format!("/time-entry/{id}")).await?;
+                #[derive(Serialize)]
+                #[serde(rename_all = "camelCase")]
+                struct Body {
+                    start_time: String,
+                    #[serde(skip_serializing_if = "Option::is_none")]
+                    end_time: Option<String>,
+                    #[serde(skip_serializing_if = "Option::is_none")]
+                    description: Option<String>,
+                }
+                let entry: TimeEntry = client
+                    .put(
+                        &format!("/time-entry/{id}"),
+                        &Body {
+                            start_time: start.unwrap_or(current.start_time),
+                            end_time: end.or(current.end_time),
+                            description: description.or(current.description),
+                        },
+                    )
+                    .await?;
+
+                if json {
+                    output::json_output(&entry);
+                } else {
+                    output::success(false, &format!("Time entry updated ({})", entry.id));
+                }
+            }
+        },
+
+        // --- External links (read-only) ---
+        TaskCommand::Links { task_id } => {
+            let task_id = resolve_task_id(&task_id, ctx, &client).await?;
+            let links: Vec<ExternalLink> = client
+                .get(&format!("/external-link/task/{task_id}"))
+                .await?;
+
+            if json {
+                output::json_output(&links);
+            } else {
+                if links.is_empty() {
+                    output::warn(false, "No external links on this task");
+                    return Ok(());
+                }
+                let dim = console::Style::new().dim();
+                for l in &links {
+                    let title = l.title.as_deref().unwrap_or(&l.external_id);
+                    eprintln!("  🔗 {} {}", title, dim.apply_to(&l.url));
+                }
+            }
+        }
+
+        // --- Transfer task between projects ---
+        TaskCommand::Transfer { task_id, project } => {
+            let task_id = resolve_task_id(&task_id, ctx, &client).await?;
+            #[derive(Serialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Body {
+                project_id: String,
+            }
+            let task: Task = client
+                .put(
+                    &format!("/task/move/{task_id}"),
+                    &Body {
+                        project_id: project,
+                    },
+                )
+                .await?;
+
+            if json {
+                json_task(&task, &client).await?;
+            } else {
+                output::success(
+                    false,
+                    &format!("Moved task '{}' to project {}", task.title, task.project_id),
+                );
+            }
+        }
     }
 
     Ok(())
+}
+
+fn print_task_compact(
+    task: &Task,
+    task_ref: Option<&str>,
+    comments: &[Activity],
+    labels: &[Label],
+    relations: &[TaskRelation],
+    time_entries: &[TimeEntry],
+    ext_links: &[ExternalLink],
+) {
+    let bold = console::Style::new().bold();
+    let dim = console::Style::new().dim();
+    let cyan = console::Style::new().cyan();
+
+    let prio_icon = priority_icon(&task.priority);
+    let ref_label = task_ref
+        .map(|r| r.to_string())
+        .unwrap_or_else(|| format!("#{}", task.number.unwrap_or(0)));
+
+    eprintln!(
+        "  {prio_icon} {} {}",
+        cyan.apply_to(&ref_label),
+        bold.apply_to(&task.title),
+    );
+    eprintln!("  {} {}", dim.apply_to("id:"), task.id);
+    eprintln!("  {} {}", dim.apply_to("status:"), task.status);
+    eprintln!("  {} {}", dim.apply_to("priority:"), task.priority);
+    if let Some(uid) = &task.user_id {
+        eprintln!("  {} {uid}", dim.apply_to("assignee:"));
+    }
+    if let Some(dd) = &task.due_date {
+        eprintln!("  {} {dd}", dim.apply_to("due:"));
+    }
+    if let Some(desc) = &task.description
+        && !desc.is_empty()
+    {
+        eprintln!("  {} {desc}", dim.apply_to("desc:"));
+    }
+
+    // Compact sub-resource summaries (skip sections with 0 items)
+    eprintln!();
+    if !labels.is_empty() {
+        let names: Vec<&str> = labels.iter().map(|l| l.name.as_str()).collect();
+        eprintln!(
+            "  {} {}",
+            dim.apply_to("Labels:"),
+            names
+                .iter()
+                .map(|n| format!("● {n}"))
+                .collect::<Vec<_>>()
+                .join("  "),
+        );
+    }
+    if !comments.is_empty() {
+        eprintln!("  {} {}", dim.apply_to("Comments:"), comments.len());
+    }
+    if !relations.is_empty() {
+        eprintln!("  {} {}", dim.apply_to("Relations:"), relations.len());
+    }
+    if !time_entries.is_empty() {
+        let total: i64 = time_entries.iter().filter_map(|e| e.duration).sum();
+        eprintln!("  {} {}", dim.apply_to("Time:"), format_duration(total),);
+    }
+    if !ext_links.is_empty() {
+        eprintln!("  {} {}", dim.apply_to("Links:"), ext_links.len());
+    }
+}
+
+fn print_task_full(
+    task: &Task,
+    task_ref: Option<&str>,
+    comments: &[Activity],
+    labels: &[Label],
+    relations: &[TaskRelation],
+    time_entries: &[TimeEntry],
+    ext_links: &[ExternalLink],
+) {
+    let bold = console::Style::new().bold();
+    let dim = console::Style::new().dim();
+    let cyan = console::Style::new().cyan();
+
+    let prio_icon = priority_icon(&task.priority);
+    let ref_label = task_ref
+        .map(|r| r.to_string())
+        .unwrap_or_else(|| format!("#{}", task.number.unwrap_or(0)));
+
+    eprintln!(
+        "  {prio_icon} {} {}",
+        cyan.apply_to(&ref_label),
+        bold.apply_to(&task.title),
+    );
+    eprintln!("  {} {}", dim.apply_to("id:"), task.id);
+    eprintln!("  {} {}", dim.apply_to("status:"), task.status);
+    eprintln!("  {} {}", dim.apply_to("priority:"), task.priority);
+    if let Some(uid) = &task.user_id {
+        eprintln!("  {} {uid}", dim.apply_to("assignee:"));
+    }
+    if let Some(dd) = &task.due_date {
+        eprintln!("  {} {dd}", dim.apply_to("due:"));
+    }
+    if let Some(sd) = &task.start_date {
+        eprintln!("  {} {sd}", dim.apply_to("start:"));
+    }
+    if let Some(ua) = &task.updated_at {
+        eprintln!("  {} {ua}", dim.apply_to("updated:"));
+    }
+    if let Some(desc) = &task.description
+        && !desc.is_empty()
+    {
+        eprintln!("  {} {desc}", dim.apply_to("desc:"));
+    }
+
+    // Full sub-resource details
+    if !comments.is_empty() {
+        eprintln!("\n  {} ({})", bold.apply_to("Comments"), comments.len());
+        for c in comments {
+            let author = c
+                .external_user_name
+                .as_deref()
+                .or(c.user_id.as_deref())
+                .unwrap_or("unknown");
+            eprintln!(
+                "    {} {}",
+                bold.apply_to(author),
+                dim.apply_to(&c.created_at),
+            );
+            eprintln!("      {}", c.content.as_deref().unwrap_or(""));
+        }
+    }
+
+    if !labels.is_empty() {
+        eprintln!("\n  {} ({})", bold.apply_to("Labels"), labels.len());
+        for l in labels {
+            eprintln!("    ● {} {}", l.name, dim.apply_to(&l.color));
+        }
+    }
+
+    if !relations.is_empty() {
+        eprintln!("\n  {} ({})", bold.apply_to("Relations"), relations.len());
+        for r in relations {
+            let icon = match r.relation_type.as_str() {
+                "subtask" => "⊂",
+                "blocks" => "⊳",
+                _ => "↔",
+            };
+            eprintln!("    {} {} → {}", icon, r.relation_type, r.target_task_id,);
+        }
+    }
+
+    if !time_entries.is_empty() {
+        let total: i64 = time_entries.iter().filter_map(|e| e.duration).sum();
+        eprintln!(
+            "\n  {} ({} total)",
+            bold.apply_to("Time"),
+            format_duration(total),
+        );
+        for e in time_entries {
+            let dur = format_duration(e.duration.unwrap_or(0));
+            eprintln!("    {} {}", dur, dim.apply_to(&e.start_time));
+        }
+    }
+
+    if !ext_links.is_empty() {
+        eprintln!("\n  {} ({})", bold.apply_to("Links"), ext_links.len());
+        for l in ext_links {
+            let title = l.title.as_deref().unwrap_or(&l.external_id);
+            eprintln!("    🔗 {} {}", title, dim.apply_to(&l.url));
+        }
+    }
+}
+
+fn format_duration(seconds: i64) -> String {
+    let hours = seconds / 3600;
+    let mins = (seconds % 3600) / 60;
+    if hours > 0 {
+        format!("{hours}h {mins}m")
+    } else {
+        format!("{mins}m")
+    }
 }
 
 /// Flatten the board response into a simple array of task objects.
@@ -736,40 +1413,4 @@ fn print_task_row(t: &serde_json::Value, cyan: &console::Style, dim: &console::S
         title,
         dim.apply_to(id),
     );
-}
-
-fn print_task(task: &Task, task_ref: Option<&str>) {
-    let bold = console::Style::new().bold();
-    let dim = console::Style::new().dim();
-    let cyan = console::Style::new().cyan();
-
-    let prio_icon = priority_icon(&task.priority);
-
-    let ref_label = task_ref
-        .map(|r| r.to_string())
-        .unwrap_or_else(|| format!("#{}", task.number.unwrap_or(0)));
-
-    eprintln!(
-        "  {prio_icon} {} {}",
-        cyan.apply_to(&ref_label),
-        bold.apply_to(&task.title),
-    );
-    eprintln!("  {} {}", dim.apply_to("id:"), task.id);
-    if let Some(r) = task_ref {
-        eprintln!("  {} {r}", dim.apply_to("ref:"));
-    }
-    eprintln!("  {} {}", dim.apply_to("status:"), task.status);
-    eprintln!("  {} {}", dim.apply_to("priority:"), task.priority);
-
-    if let Some(uid) = &task.user_id {
-        eprintln!("  {} {uid}", dim.apply_to("assignee:"));
-    }
-    if let Some(dd) = &task.due_date {
-        eprintln!("  {} {dd}", dim.apply_to("due:"));
-    }
-    if let Some(desc) = &task.description
-        && !desc.is_empty()
-    {
-        eprintln!("  {} {desc}", dim.apply_to("desc:"));
-    }
 }

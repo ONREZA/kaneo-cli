@@ -35,19 +35,19 @@ const EXPECTED_OPERATIONS: &[(&str, &str)] = &[
     ("reorderColumns", "column reorder"),
     ("deleteColumn", "column delete"),
     // Labels
-    ("getTaskLabels", "label task"),
+    ("getTaskLabels", "task label ls"),
     ("getWorkspaceLabels", "label ls"),
     ("createLabel", "label create"),
     ("getLabel", "label get"),
     ("updateLabel", "label update"),
     ("deleteLabel", "label delete"),
-    ("attachLabelToTask", "label attach"),
-    ("detachLabelFromTask", "label detach"),
-    // Activity
-    ("getActivities", "activity ls"),
-    ("createComment", "activity comment"),
-    ("updateComment", "activity edit-comment"),
-    ("deleteComment", "activity delete-comment"),
+    ("attachLabelToTask", "task label add"),
+    ("detachLabelFromTask", "task label rm"),
+    // Activity / Comments (via activity endpoints)
+    ("getActivities", "task comment ls / task get"),
+    ("createComment", "task comment add"),
+    ("updateComment", "task comment edit"),
+    ("deleteComment", "task comment rm"),
     // Notifications
     ("listNotifications", "notification ls"),
     ("createNotification", "notification create"),
@@ -55,33 +55,35 @@ const EXPECTED_OPERATIONS: &[(&str, &str)] = &[
     ("markAllNotificationsAsRead", "notification read-all"),
     ("clearAllNotifications", "notification clear-all"),
     // Time Entries
-    ("getTaskTimeEntries", "time-entry ls"),
-    ("getTimeEntry", "time-entry get"),
-    ("createTimeEntry", "time-entry create"),
-    ("updateTimeEntry", "time-entry update"),
+    ("getTaskTimeEntries", "task time ls"),
+    ("getTimeEntry", "task time get"),
+    ("createTimeEntry", "task time add"),
+    ("updateTimeEntry", "task time edit"),
     // Search
     ("globalSearch", "search"),
     // Workspace members (dedicated endpoint)
     ("getWorkspaceMembers", "workspace members"),
-    // Comments (first-class)
-    ("getTaskComments", "comment ls"),
-    ("createTaskComment", "comment create"),
-    ("updateTaskComment", "comment update"),
-    ("deleteTaskComment", "comment delete"),
+    // Comments (first-class, server-only — CLI uses activity endpoints)
+    ("getTaskComments", "server-only (unused by CLI)"),
+    ("createTaskComment", "server-only (unused by CLI)"),
+    ("updateTaskComment", "server-only (unused by CLI)"),
+    ("deleteTaskComment", "server-only (unused by CLI)"),
     // Task Relations
-    ("getTaskRelations", "task-relation ls"),
-    ("createTaskRelation", "task-relation create"),
-    ("deleteTaskRelation", "task-relation rm"),
+    ("getTaskRelations", "task rel ls"),
+    ("createTaskRelation", "task rel add"),
+    ("deleteTaskRelation", "task rel rm"),
     // Bulk operations
     ("bulkUpdateTasks", "task bulk"),
+    // Move task
+    ("moveTask", "task transfer"),
     // Internal
-    ("createActivity", "activity create (internal)"),
+    ("createActivity", "internal"),
     ("getConfig", "internal"),
     // Invitations
     ("getUserPendingInvitations", "invitation pending"),
     ("getInvitationDetails", "invitation get"),
     // External Links
-    ("getExternalLinksByTask", "external-link task"),
+    ("getExternalLinksByTask", "task links"),
     // Workflow Rules
     ("getWorkflowRules", "workflow-rule ls"),
     ("upsertWorkflowRule", "workflow-rule upsert"),
