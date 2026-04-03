@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0] - 2026-04-03
+
+### ⚠️ BREAKING CHANGES
+
+- **cli:** task-centric architecture, fix comment bug, unified task view ([47e5078](https://github.com/ONREZA/kaneo-cli/commit/47e5078cb1d244af54cbde03930d96b4e5cf9465))
+
 ## [0.9.0] - 2026-03-27
 
 ### ✨ Features
