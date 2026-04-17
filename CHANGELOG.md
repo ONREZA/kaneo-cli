@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0] - 2026-04-17
+
+### ✨ Features
+
+- **cli:** task start-date, workspace me, notification prefs ([269f26e](https://github.com/ONREZA/kaneo-cli/commit/269f26eb321317c46135857974ccf2e497ded845))
+
 ## [0.10.0] - 2026-04-03
 
 ### ⚠️ BREAKING CHANGES
