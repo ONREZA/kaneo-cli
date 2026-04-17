@@ -218,8 +218,6 @@ pub enum WorkspaceCommand {
         /// Workspace ID
         id: String,
     },
-    /// Show your membership (userId, role) in the active workspace
-    Me,
     /// List workspace members
     Members,
     /// Invite a member by email

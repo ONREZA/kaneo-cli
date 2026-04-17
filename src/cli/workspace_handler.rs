@@ -119,30 +119,6 @@ pub async fn run(args: WorkspaceArgs, ctx: &ResolvedContext, json: bool) -> anyh
             }
         }
 
-        WorkspaceCommand::Me => {
-            let member: crate::api::types::ActiveMember =
-                client.get("/auth/organization/get-active-member").await?;
-
-            if json {
-                output::json_output(&member);
-            } else {
-                let bold = console::Style::new().bold();
-                let dim = console::Style::new().dim();
-                eprintln!("  {} {}", dim.apply_to("member id:"), member.id);
-                eprintln!("  {} {}", dim.apply_to("user id:"), member.user_id);
-                eprintln!(
-                    "  {} {}",
-                    dim.apply_to("workspace:"),
-                    member.organization_id
-                );
-                eprintln!(
-                    "  {} {}",
-                    dim.apply_to("role:"),
-                    bold.apply_to(&member.role)
-                );
-            }
-        }
-
         WorkspaceCommand::Members => {
             let ws_id = resolve_workspace(None, ctx)?;
 

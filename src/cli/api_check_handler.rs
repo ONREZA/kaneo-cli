@@ -117,7 +117,6 @@ const EXPECTED_OPERATIONS: &[(&str, &str)] = &[
     ("leaveOrganization", "workspace leave"),
     ("setOrganizationActive", "workspace set-active"),
     ("checkOrganizationSlug", "workspace check-slug"),
-    ("getOrganizationActiveMember", "workspace me"),
     // Notification preferences
     ("getNotificationPreferences", "notification prefs show"),
     ("updateNotificationPreferences", "notification prefs set"),

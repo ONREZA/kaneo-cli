@@ -367,17 +367,6 @@ pub struct BulkUpdateResult {
     pub updated_count: i64,
 }
 
-// --- Active organization member ---
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ActiveMember {
-    pub id: String,
-    pub user_id: String,
-    pub organization_id: String,
-    pub role: String,
-}
-
 // --- Notification preferences ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
