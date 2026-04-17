@@ -218,6 +218,8 @@ pub enum WorkspaceCommand {
         /// Workspace ID
         id: String,
     },
+    /// Show your membership (userId, role) in the active workspace
+    Me,
     /// List workspace members
     Members,
     /// Invite a member by email
@@ -477,6 +479,9 @@ pub enum TaskCommand {
         /// Due date (ISO format)
         #[arg(long)]
         due_date: Option<String>,
+        /// Start date (ISO format)
+        #[arg(long)]
+        start_date: Option<String>,
         /// Assign to user ID
         #[arg(long)]
         assignee: Option<String>,
@@ -522,6 +527,13 @@ pub enum TaskCommand {
         /// Task ID
         id: String,
         /// Due date in ISO format (omit to clear)
+        date: Option<String>,
+    },
+    /// Update task start date
+    StartDate {
+        /// Task ID
+        id: String,
+        /// Start date in ISO format (omit to clear)
         date: Option<String>,
     },
     /// Delete a task
@@ -890,6 +902,74 @@ pub enum NotificationCommand {
         /// Related entity type (task, workspace)
         #[arg(long)]
         related_entity_type: Option<String>,
+    },
+    /// Manage notification delivery preferences (email, ntfy, gotify, webhook)
+    Prefs(NotificationPrefsArgs),
+}
+
+#[derive(Parser)]
+pub struct NotificationPrefsArgs {
+    #[command(subcommand)]
+    pub command: NotificationPrefsCommand,
+}
+
+#[derive(Subcommand)]
+pub enum NotificationPrefsCommand {
+    /// Show notification preferences
+    #[command(alias = "get")]
+    Show,
+    /// Update global delivery preferences (only provided flags are changed)
+    Set {
+        #[arg(long)]
+        email_enabled: Option<bool>,
+        #[arg(long)]
+        ntfy_enabled: Option<bool>,
+        #[arg(long)]
+        ntfy_server_url: Option<String>,
+        #[arg(long)]
+        ntfy_topic: Option<String>,
+        #[arg(long)]
+        ntfy_token: Option<String>,
+        #[arg(long)]
+        gotify_enabled: Option<bool>,
+        #[arg(long)]
+        gotify_server_url: Option<String>,
+        #[arg(long)]
+        gotify_token: Option<String>,
+        #[arg(long)]
+        webhook_enabled: Option<bool>,
+        #[arg(long)]
+        webhook_url: Option<String>,
+        #[arg(long)]
+        webhook_secret: Option<String>,
+    },
+    /// Upsert per-workspace rule (unspecified flags keep current values;
+    /// for a brand-new rule unspecified booleans default to true and mode to "all")
+    Workspace {
+        /// Workspace ID (defaults to active)
+        id: Option<String>,
+        #[arg(long)]
+        active: Option<bool>,
+        #[arg(long)]
+        email_enabled: Option<bool>,
+        #[arg(long)]
+        ntfy_enabled: Option<bool>,
+        #[arg(long)]
+        gotify_enabled: Option<bool>,
+        #[arg(long)]
+        webhook_enabled: Option<bool>,
+        /// Which projects trigger notifications: all, selected
+        #[arg(long)]
+        project_mode: Option<String>,
+        /// Comma-separated project IDs (required when project-mode=selected)
+        #[arg(long)]
+        projects: Option<String>,
+    },
+    /// Delete a per-workspace rule (falls back to global preferences)
+    #[command(alias = "rm-workspace")]
+    DeleteWorkspace {
+        /// Workspace ID (defaults to active)
+        id: Option<String>,
     },
 }
 

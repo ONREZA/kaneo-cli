@@ -16,7 +16,7 @@ const EXPECTED_OPERATIONS: &[(&str, &str)] = &[
     ("listTasks", "task ls"),
     ("getTask", "task get"),
     ("createTask", "task create"),
-    ("updateTask", "task update (full)"),
+    ("updateTask", "task start-date (via generic update)"),
     ("updateTaskStatus", "task status"),
     ("updateTaskPriority", "task priority"),
     ("updateTaskAssignee", "task assign"),
@@ -117,6 +117,18 @@ const EXPECTED_OPERATIONS: &[(&str, &str)] = &[
     ("leaveOrganization", "workspace leave"),
     ("setOrganizationActive", "workspace set-active"),
     ("checkOrganizationSlug", "workspace check-slug"),
+    ("getOrganizationActiveMember", "workspace me"),
+    // Notification preferences
+    ("getNotificationPreferences", "notification prefs show"),
+    ("updateNotificationPreferences", "notification prefs set"),
+    (
+        "upsertNotificationPreferenceWorkspaceRule",
+        "notification prefs workspace",
+    ),
+    (
+        "deleteNotificationPreferenceWorkspaceRule",
+        "notification prefs delete-workspace",
+    ),
 ];
 
 pub async fn run(ctx: &ResolvedContext, json: bool) -> anyhow::Result<()> {

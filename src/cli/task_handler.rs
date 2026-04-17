@@ -251,6 +251,7 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
             priority,
             status,
             due_date,
+            start_date,
             assignee,
         } => {
             let project_id = resolve_project(None, ctx)?;
@@ -261,6 +262,7 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                 priority,
                 status,
                 due_date,
+                start_date,
                 user_id: assignee,
             };
             let task: Task = client.post(&format!("/task/{project_id}"), &body).await?;
@@ -389,6 +391,51 @@ pub async fn run(args: TaskArgs, ctx: &ResolvedContext, json: bool) -> anyhow::R
                     Some(d) => output::success(false, &format!("Task '{}' due → {d}", task.title)),
                     None => {
                         output::success(false, &format!("Cleared due date for '{}'", task.title))
+                    }
+                }
+            }
+        }
+
+        TaskCommand::StartDate { id, date } => {
+            let id = resolve_task_id(&id, ctx, &client).await?;
+            let current: Task = client.get(&format!("/task/{id}")).await?;
+
+            #[derive(Serialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Body {
+                title: String,
+                description: String,
+                priority: String,
+                status: String,
+                project_id: String,
+                position: f64,
+                start_date: Option<String>,
+                due_date: Option<String>,
+                user_id: Option<String>,
+            }
+
+            let body = Body {
+                title: current.title.clone(),
+                description: current.description.clone().unwrap_or_default(),
+                priority: current.priority.clone(),
+                status: current.status.clone(),
+                project_id: current.project_id.clone(),
+                position: current.position.unwrap_or(0.0),
+                start_date: date.clone(),
+                due_date: current.due_date.clone(),
+                user_id: current.user_id.clone(),
+            };
+            let task: Task = client.put(&format!("/task/{id}"), &body).await?;
+
+            if json {
+                json_task(&task, &client).await?;
+            } else {
+                match date {
+                    Some(d) => {
+                        output::success(false, &format!("Task '{}' start → {d}", task.title))
+                    }
+                    None => {
+                        output::success(false, &format!("Cleared start date for '{}'", task.title))
                     }
                 }
             }
@@ -1072,6 +1119,9 @@ fn print_task_compact(
     }
     if let Some(dd) = &task.due_date {
         eprintln!("  {} {dd}", dim.apply_to("due:"));
+    }
+    if let Some(sd) = &task.start_date {
+        eprintln!("  {} {sd}", dim.apply_to("start:"));
     }
     if let Some(desc) = &task.description
         && !desc.is_empty()

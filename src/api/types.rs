@@ -70,6 +70,8 @@ pub struct CreateTaskBody {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub due_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub user_id: Option<String>,
 }
 
@@ -85,6 +87,8 @@ pub struct UpdateTaskBody {
     pub position: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub due_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_id: Option<String>,
 }
@@ -363,6 +367,60 @@ pub struct BulkUpdateResult {
     pub updated_count: i64,
 }
 
+// --- Active organization member ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActiveMember {
+    pub id: String,
+    pub user_id: String,
+    pub organization_id: String,
+    pub role: String,
+}
+
+// --- Notification preferences ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationPreferences {
+    pub email_address: Option<String>,
+    pub email_enabled: bool,
+    pub ntfy_enabled: bool,
+    pub ntfy_configured: bool,
+    pub ntfy_server_url: Option<String>,
+    pub ntfy_topic: Option<String>,
+    pub ntfy_token_configured: bool,
+    pub masked_ntfy_token: Option<String>,
+    pub gotify_enabled: bool,
+    pub gotify_configured: bool,
+    pub gotify_server_url: Option<String>,
+    pub gotify_token_configured: bool,
+    pub masked_gotify_token: Option<String>,
+    pub webhook_enabled: bool,
+    pub webhook_configured: bool,
+    pub webhook_url: Option<String>,
+    pub webhook_secret_configured: bool,
+    pub masked_webhook_secret: Option<String>,
+    pub workspaces: Vec<WorkspaceNotificationRule>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceNotificationRule {
+    pub id: String,
+    pub workspace_id: String,
+    pub workspace_name: String,
+    pub is_active: bool,
+    pub email_enabled: bool,
+    pub ntfy_enabled: bool,
+    pub gotify_enabled: bool,
+    pub webhook_enabled: bool,
+    pub project_mode: String,
+    pub selected_project_ids: Vec<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -444,10 +502,12 @@ mod tests {
             priority: "low".into(),
             status: "backlog".into(),
             due_date: None,
+            start_date: None,
             user_id: None,
         };
         let json = serde_json::to_string(&body).unwrap();
         assert!(!json.contains("dueDate"));
+        assert!(!json.contains("startDate"));
         assert!(!json.contains("userId"));
         assert!(json.contains("title"));
     }
@@ -460,10 +520,12 @@ mod tests {
             priority: "low".into(),
             status: "backlog".into(),
             due_date: Some("2026-06-01".into()),
+            start_date: Some("2026-05-01".into()),
             user_id: Some("user-1".into()),
         };
         let json = serde_json::to_string(&body).unwrap();
         assert!(json.contains("dueDate"));
+        assert!(json.contains("startDate"));
         assert!(json.contains("userId"));
     }
 
