@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.1] - 2026-04-17
+
+### 🐛 Bug Fixes
+
+- **cli:** whoami no longer crashes on null session; drop broken workspace me ([a804d44](https://github.com/ONREZA/kaneo-cli/commit/a804d44f567e2a7dda7d4070b77356db92cf24df))
+
 ## [0.11.0] - 2026-04-17
 
 ### ✨ Features
